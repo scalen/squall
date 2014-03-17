@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.openimaj.rdf.storm.utils.DeepHashArray;
@@ -81,7 +82,7 @@ public class FixedHashSteM implements TimestampedSteM<Map<String, Node>>{
 	public List<Map<String,Node>> probe(Map<String, Node> typed) {
 		List<Map<String, Node>> ret = new ArrayList<Map<String,Node>>();
 		DeepHashArray<Node> sharedBindings = extractSharedBindings(typed);
-		List<Map<String, Node>> matchedQueue = this.window.getWindow(sharedBindings);
+		Set<Map<String, Node>> matchedQueue = this.window.getWindow(sharedBindings);
 		if (matchedQueue != null){
 			for (Map<String, Node> sibitem : matchedQueue) {
 				Map<String,Node> newbind = new HashMap<String, Node>();

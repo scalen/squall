@@ -66,5 +66,45 @@ public interface TimedMap<K, V> extends TimeLimitedCollection, Map<K, V> {
 	 * 		whether the add was successful
 	 */
 	public V put(K key, V value, long timestamp, long delay, TimeUnit unit);
+	
+	/**
+	 * @author davidlmonks
+	 *
+	 * @param <K>
+	 * @param <V>
+	 */
+	public class TimedMapEntry<K,V> extends TimeWrapped<V> implements java.util.Map.Entry<K,V> {
 
+		private final K key;
+		
+		protected TimedMapEntry(K key, V value, long ts, long delay,
+				TimeUnit delayUnit) {
+			super(value, ts, delay, delayUnit);
+			this.key = key;
+		}
+
+		@Override
+		public K getKey() {
+			return this.key;
+		}
+
+		@Override
+		public V getValue() {
+			return this.wrapped;
+		}
+
+		@Override
+		public V setValue(V value) {
+			return this.wrapped = value;
+		}
+		
+		@Override
+		public boolean equals(Object obj) {
+			return (obj instanceof java.util.Map.Entry)
+					&& java.util.Map.Entry.class.cast(obj).getKey().equals(this.key)
+					&& super.equals(obj);
+		}
+		
+	}
+	
 }

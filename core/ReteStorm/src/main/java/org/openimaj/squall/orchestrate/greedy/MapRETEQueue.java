@@ -2,6 +2,7 @@ package org.openimaj.squall.orchestrate.greedy;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -70,7 +71,7 @@ public class MapRETEQueue{
 	 * @param unit 
 	 * @return
 	 */
-	public List<Map<String,Node>> offer(Map<String, Node> typed, long timestamp, long delay, TimeUnit unit) {
+	public Set<Map<String,Node>> offer(Map<String, Node> typed, long timestamp, long delay, TimeUnit unit) {
 		window.put(extractSharedBindings(typed), typed, timestamp, delay, unit);
 		return check(typed);
 	}
@@ -81,7 +82,7 @@ public class MapRETEQueue{
 	 * @param delay 
 	 * @return
 	 */
-	public List<Map<String,Node>> offer(Map<String, Node> typed, long timestamp, long delay) {
+	public Set<Map<String,Node>> offer(Map<String, Node> typed, long timestamp, long delay) {
 		window.put(extractSharedBindings(typed), typed, timestamp, delay);
 		return check(typed);
 	}
@@ -91,7 +92,7 @@ public class MapRETEQueue{
 	 * @param timestamp 
 	 * @return
 	 */
-	public List<Map<String,Node>> offer(Map<String, Node> typed, long timestamp) {
+	public Set<Map<String,Node>> offer(Map<String, Node> typed, long timestamp) {
 		window.put(extractSharedBindings(typed), typed, timestamp);
 		return check(typed);
 	}
@@ -100,7 +101,7 @@ public class MapRETEQueue{
 	 * @param typed
 	 * @return
 	 */
-	public List<Map<String,Node>> offer(Map<String, Node> typed) {
+	public Set<Map<String,Node>> offer(Map<String, Node> typed) {
 		window.put(extractSharedBindings(typed), typed);
 		return check(typed);
 	}
@@ -120,10 +121,10 @@ public class MapRETEQueue{
 		return vals;
 	}
 
-	private List<Map<String,Node>> check(Map<String, Node> typed) {
-		List<Map<String, Node>> ret = new ArrayList<Map<String,Node>>();
+	private Set<Map<String,Node>> check(Map<String, Node> typed) {
+		Set<Map<String, Node>> ret = new HashSet<Map<String,Node>>();
 		DeepHashArray<Node> sharedBindings = extractSharedBindings(typed);
-		List<Map<String, Node>> matchedQueue = sibling.window.getWindow(sharedBindings);
+		Set<Map<String, Node>> matchedQueue = sibling.window.getWindow(sharedBindings);
 		if (matchedQueue != null){
 			for (Map<String, Node> sibitem : matchedQueue) {
 				Map<String,Node> newbind = new HashMap<String, Node>();

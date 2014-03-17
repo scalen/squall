@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
-import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.log4j.Logger;
@@ -26,8 +25,9 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	
 	private static final Logger logger = Logger.getLogger(HashedCircularPriorityWindow.class);
 
-	private final Map<K,List<V>> map;
-	private final PriorityQueue<TimedMapEntry> queue;
+	private final Map<K,Set<V>> map;
+	private final Map<V,TimeWrapped<V>> timeMap;
+	private final PriorityQueue<TimedMapEntry<K, V>> queue;
 	
 	protected final int semanticCapacity;
 	protected final int maxCapacity;
@@ -55,8 +55,9 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	 * 
 	 */
 	public HashedCircularPriorityWindow(OverflowHandler<V> handler, int queryCap, int maxCap, long delay, TimeUnit unit){
-		this.map = new HashMap<K, List<V>>();
-		this.queue = new PriorityQueue<TimedMapEntry>(maxCap + 1);
+		this.map = new HashMap<K, Set<V>>();
+		this.timeMap = new HashMap<V, TimeWrapped<V>>();
+		this.queue = new PriorityQueue<TimedMapEntry<K,V>>(maxCap + 1);
 		
 		this.semanticCapacity = queryCap;
 		this.maxCapacity = maxCap;
@@ -82,18 +83,20 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	}
 	
 	private V removeOldest() {
-		TimedMapEntry last = HashedCircularPriorityWindow.this.queue.remove();
+		TimedMapEntry<K,V> last = this.queue.remove();
 		V lastValue = last.getValue();
 		K lastKey = last.getKey();
 		
 		logger.debug("Removing from key: " + lastKey + " by prune capacity");
-		if(map.get(lastKey) == null){
+		if (this.map.get(lastKey) == null){
 			System.out.println("This should never ever happen. Ever.");
 		}
-		HashedCircularPriorityWindow.this.map.get(lastKey).remove(lastValue);
-		if (HashedCircularPriorityWindow.this.map.get(lastKey).isEmpty()){
-			logger.debug("Removing the window of key: " + lastKey);
-			HashedCircularPriorityWindow.this.map.remove(lastKey);
+		if (this.timeMap.get(lastValue).getDelay(unit) == last.getDelay(unit)){
+			this.map.get(lastKey).remove(lastValue);
+			if (this.map.get(lastKey).isEmpty()){
+				logger.debug("Removing the window of key: " + lastKey);
+				this.map.remove(lastKey);
+			}
 		}
 		
 		return lastValue; 
@@ -108,8 +111,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	
 	private boolean containsOldItems() {
 		if (this.queue.isEmpty()) return false;
-		long delay2 = this.queue.peek().getDelay(TimeUnit.MILLISECONDS);
-		if(delay2>0) return false;
+		if(this.queue.peek().getDelay(TimeUnit.MILLISECONDS) > 0) return false;
 		return true;
 	}
 	
@@ -135,6 +137,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	@Override
 	public void clear() {
 		this.map.clear();
+		this.timeMap.clear();
 		this.queue.clear();
 	}
 
@@ -177,23 +180,28 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 
 	@Override
 	public V put(K key, V value, long timestamp, long delay, TimeUnit unit) {
-		List<V> window = this.map.get(key);
+		Set<V> window = this.map.get(key);
 		if (window == null){
-			window = new ArrayList<V>();
+			logger.debug("Adding the window for key: " + key);
+			window = new HashSet<V>();
 			this.map.put(key, window);
 		}
-		logger.debug("Adding the window for key: " + key);
-		if(this.map.get(key) == null){
-			System.out.println("Again, this shoudl never ever happen");
-		}
-		boolean windowAdded = window.add(value);
-		TimedMapEntry tme = new TimedMapEntry(key, value, timestamp, delay, unit);
-		boolean queueAdded = this.queue.add(tme);
-		if (windowAdded && queueAdded){
+		
+		TimedMapEntry<K,V> tme = new TimedMapEntry<K,V>(key, value, timestamp, delay, unit);
+		if (window.add(value)){
+			this.queue.add(tme);
 			this.pruneToCapacity();
-			return value;
+		} else {
+			TimeWrapped<V> existingEntry = this.timeMap.get(value); 
+			if (existingEntry.equals(tme)){
+				return null;
+			}
+			this.queue.remove(existingEntry);
+			this.queue.add(tme);
 		}
-		return null;
+		this.timeMap.put(value, tme);
+		
+		return value;
 	}
 
 	@Override
@@ -204,15 +212,32 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	}
 	
 	/**
-	 * Gets the sub queue of items added to this queue that matches the given key.  Before returning the queue, prunes the queue to be within the given time window.
+	 * Gets the sub queue of items added to this queue that matches the given key.
 	 * @param key
 	 * 		The key by which to retrieve items.
 	 * @return
-	 * 		The queue of items that were added with the same key.  Returns null if there are no items with the given key.
+	 * 		The set of items that were added with the same key.  Returns null if there are no items with the given key.
 	 */
-	public List<V> getWindow(K key){
+	public Set<V> getWindow(K key){
 		this.pruneToDuration();
 		return this.map.get(key);
+	}
+	
+	/**
+	 * Gets the sub queue of items added to this queue that matches the given key.  Items are returned with their associated timestamps.
+	 * @param key
+	 * 		The key by which to retrieve items.
+	 * @return
+	 * 		The set of items that were added with the same key, along with their most recent timestamps.  Returns null if there are no items with the given key.
+	 */
+	public Set<TimeWrapped<V>> getTimedWindow(K key){
+		Set<TimeWrapped<V>> window = new HashSet<TimeWrapped<V>>();
+		
+		for (V w : this.map.get(key)){
+			window.add(this.timeMap.get(w));
+		}
+		
+		return window;
 	}
 
 	@Override
@@ -239,77 +264,77 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 		return entrySet;
 	}
 	
-	private class MapEntry implements java.util.Map.Entry<K,V> {
-
-		private final K key;
-		private V value;
-		
-		public MapEntry(K key, V value) {
-			this.key = key;
-			this.value = value;
-		}
-
-		@Override
-		public K getKey() {
-			return this.key;
-		}
-
-		@Override
-		public V getValue() {
-			return this.value;
-		}
-
-		@Override
-		public V setValue(V value) {
-			return this.value = value;
-		}
-		
-		@SuppressWarnings("unchecked")
-		@Override
-		public boolean equals(Object obj) {
-			try {
-				return this.value.equals(((MapEntry)obj).getValue());
-			} catch (ClassCastException e) {}
-			try {
-				return this.value.equals((V)obj);
-			} catch (ClassCastException ex) {}
-			return false;
-		}
-		
-	}
-
-	/**
-	 * Inner class used to represent a timestamped MapEntry for the generic type V contained by the queue and its key of type K.
-	 */
-	private class TimedMapEntry extends MapEntry implements Delayed {
-
-		private long droptime;
-
-		public TimedMapEntry (K key, V toWrap, long ts, long delay, TimeUnit delayUnit) {
-			super(key, toWrap);
-			droptime = ts + TimeUnit.MILLISECONDS.convert(delay, delayUnit);
-		}
-
-		@Override
-		public boolean equals(Object obj){
-			if (obj.getClass().equals(TimedMapEntry.class))
-				return getDelay(HashedCircularPriorityWindow.this.unit) == this.getClass().cast(obj).getDelay(HashedCircularPriorityWindow.this.unit)
-						&& getValue().equals(TimedMapEntry.class.cast(obj).getValue());
-			else
-				return super.equals(obj);
-		}
-
-		@Override
-		public int compareTo(Delayed arg0) {
-			return (int) (arg0.getDelay(TimeUnit.MILLISECONDS) - getDelay(TimeUnit.MILLISECONDS));
-		}
-
-		@Override
-		public long getDelay(TimeUnit arg0) {
-			return arg0.convert(droptime - (new Date()).getTime(),TimeUnit.MILLISECONDS);
-		}
-
-	}
+//	private class MapEntry implements java.util.Map.Entry<K,V> {
+//
+//		private final K key;
+//		private V value;
+//		
+//		public MapEntry(K key, V value) {
+//			this.key = key;
+//			this.value = value;
+//		}
+//
+//		@Override
+//		public K getKey() {
+//			return this.key;
+//		}
+//
+//		@Override
+//		public V getValue() {
+//			return this.value;
+//		}
+//
+//		@Override
+//		public V setValue(V value) {
+//			return this.value = value;
+//		}
+//		
+//		@SuppressWarnings("unchecked")
+//		@Override
+//		public boolean equals(Object obj) {
+//			try {
+//				return this.value.equals(((MapEntry)obj).getValue());
+//			} catch (ClassCastException e) {}
+//			try {
+//				return this.value.equals((V)obj);
+//			} catch (ClassCastException ex) {}
+//			return false;
+//		}
+//		
+//	}
+//
+//	/**
+//	 * Inner class used to represent a timestamped MapEntry for the generic type V contained by the queue and its key of type K.
+//	 */
+//	private class TimedMapEntry extends MapEntry implements Delayed {
+//
+//		private long droptime;
+//
+//		public TimedMapEntry (K key, V toWrap, long ts, long delay, TimeUnit delayUnit) {
+//			super(key, toWrap);
+//			droptime = ts + TimeUnit.MILLISECONDS.convert(delay, delayUnit);
+//		}
+//
+//		@Override
+//		public boolean equals(Object obj){
+//			if (obj.getClass().equals(TimedMapEntry.class))
+//				return getDelay(HashedCircularPriorityWindow.this.unit) == this.getClass().cast(obj).getDelay(HashedCircularPriorityWindow.this.unit)
+//						&& getValue().equals(TimedMapEntry.class.cast(obj).getValue());
+//			else
+//				return super.equals(obj);
+//		}
+//
+//		@Override
+//		public int compareTo(Delayed arg0) {
+//			return (int) (arg0.getDelay(TimeUnit.MILLISECONDS) - getDelay(TimeUnit.MILLISECONDS));
+//		}
+//
+//		@Override
+//		public long getDelay(TimeUnit arg0) {
+//			return arg0.convert(droptime - (new Date()).getTime(),TimeUnit.MILLISECONDS);
+//		}
+//
+//	}
 	
 	// METHODS THAT DON'T MAKE SENSE IN THIS OBJECT
 
