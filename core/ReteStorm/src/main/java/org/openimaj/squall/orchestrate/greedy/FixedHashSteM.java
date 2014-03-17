@@ -11,7 +11,9 @@ import java.util.concurrent.TimeUnit;
 import org.openimaj.rdf.storm.utils.DeepHashArray;
 import org.openimaj.rdf.storm.utils.HashedCircularPriorityWindow;
 import org.openimaj.rdf.storm.utils.OverflowHandler;
+import org.openimaj.rdf.storm.utils.TimeLimitedCollection.TimeWrapped;
 import org.openimaj.squall.orchestrate.WindowInformation;
+import org.openimaj.util.data.Context;
 
 import com.hp.hpl.jena.graph.Node;
 
@@ -95,8 +97,34 @@ public class FixedHashSteM implements TimestampedSteM<Map<String, Node>>{
 				ret.add(newbind);
 			}
 		}
-		
 		return ret ;
 	}
+	
+	@Override
+	public List<TimeAnnotated<Map<String, Node>>> probe(Map<String, Node> typed, long timestamp, long delay, TimeUnit delayUnit) {
+		long newDropTime = timestamp + TimeUnit.MILLISECONDS.convert(delay, delayUnit);
+		
+		List<TimeAnnotated<Map<String, Node>>> ret = new ArrayList<TimeAnnotated<Map<String,Node>>>();
+		DeepHashArray<Node> sharedBindings = extractSharedBindings(typed);
+		Set<TimeWrapped<Map<String, Node>>> matchedQueue = this.window.getTimedWindow(sharedBindings);
+		if (matchedQueue != null){
+			for (TimeWrapped<Map<String, Node>> sibitem : matchedQueue) {
+				Map<String,Node> newbind = new HashMap<String, Node>();
+				for (Entry<String, Node> map : typed.entrySet()) {
+					newbind.put(map.getKey(), map.getValue());
+				}
+				for (Entry<String, Node> map : sibitem.getWrapped().entrySet()) {
+					newbind.put(map.getKey(), map.getValue());
+				}
+				ret.add(new TimeAnnotated<Map<String, Node>>(newbind,
+																Math.max(timestamp, sibitem.getTimestamp()),
+																Math.min(newDropTime, sibitem.getDropTime())
+															));
+			}
+		}
+		return ret ;
+	}
+	
+	
 
 }

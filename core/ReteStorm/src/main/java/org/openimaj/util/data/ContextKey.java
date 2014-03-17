@@ -29,6 +29,16 @@ public enum ContextKey {
 	 * The key to extract the atom from a context.
 	 */
 	ATOM_KEY("atom")
+	, 
+	/**
+	 * 
+	 */
+	TIMESTAMP_KEY("timestamp")
+	, 
+	/**
+	 * 
+	 */
+	DURATION_KEY("duration")
 	;
 	
 	private String key;

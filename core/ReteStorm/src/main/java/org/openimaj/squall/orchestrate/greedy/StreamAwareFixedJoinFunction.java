@@ -14,6 +14,7 @@ import org.openimaj.rdf.storm.utils.OverflowHandler.CapacityOverflowHandler;
 import org.openimaj.rdf.storm.utils.OverflowHandler.DurationOverflowHandler;
 import org.openimaj.squall.orchestrate.NamedNode;
 import org.openimaj.squall.orchestrate.WindowInformation;
+import org.openimaj.squall.orchestrate.greedy.TimestampedSteM.TimeAnnotated;
 import org.openimaj.squall.compile.data.AnonimisedRuleVariableHolder;
 import org.openimaj.squall.compile.data.IFunction;
 import org.openimaj.squall.compile.data.RuleWrappedFunction;
@@ -174,6 +175,7 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 		this.outputBuffer = null;
 	}
 	
+	@SuppressWarnings("unused") // needed for construction by reflection during kryo deserialisation
 	private StreamAwareFixedJoinFunction(){
 		this.leftQueue = null;
 		this.rightQueue = null;
@@ -277,6 +279,7 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 		return leftbinds;
 	}
 	
+	// builds the data into the proposed SteM, probing the other SteM where appropriate, without external time annotations.
 	private List<Context> buildAndProbe(Map<String, Node> inBinds, FixedHashSteM buildSteM, FixedHashSteM probeSteM){
 		List<Context> ret = new ArrayList<Context>();
 		if (buildSteM.build(inBinds)){
@@ -291,9 +294,33 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 		return ret;
 	}
 	
+	// builds the data into the proposed SteM, probing the other SteM where appropriate, maintaining time annotations received.
+	private List<Context> buildAndProbe(Map<String, Node> inBinds,
+										Long timestamp,
+										Long delay,
+										FixedHashSteM buildSteM,
+										FixedHashSteM probeSteM){
+		if (timestamp == null || delay == null) return buildAndProbe(inBinds, buildSteM, probeSteM);
+		List<Context> ret = new ArrayList<Context>();
+		if (buildSteM.build(inBinds,timestamp,delay, TimeUnit.MILLISECONDS)){
+			logger.debug("Joining Left Stream");
+			for (TimeAnnotated<Map<String, Node>> fullbindings : probeSteM.probe(inBinds, timestamp, delay, TimeUnit.MILLISECONDS)) {
+				logger.debug(String.format("Joined: %s -> %s", inBinds, fullbindings));
+				Context r = new Context();
+				r.put(ContextKey.BINDINGS_KEY.toString(),fullbindings.getWrapped());
+				r.put(ContextKey.TIMESTAMP_KEY.toString(), fullbindings.getTimestamp());
+				r.put(ContextKey.DURATION_KEY.toString(), fullbindings.getDropTime()-fullbindings.getTimestamp());
+				ret.add(r);
+			}
+		}
+		return ret;
+	}
+	
 	@Override
 	public List<Context> apply(Context in) {
 		String stream = in.getTyped(ContextKey.STREAM_KEY.toString());
+		Long timestamp = in.getTyped(ContextKey.TIMESTAMP_KEY.toString());
+		Long delay = in.getTyped(ContextKey.DURATION_KEY.toString());
 		logger.debug(String.format("JOIN: Received input from %s, checking against %s and %s",
 										stream,
 										this.leftOverflow.getSource(),
@@ -306,11 +333,11 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 		logger.debug(String.format("Joining: %s with %s", this, typed));
 		if(stream.equals(this.leftOverflow.getSource())){
 			Map<String, Node> leftbinds = this.getOutVarsMapping(this.leftVarsToOutVars, typed);
-			ret = this.buildAndProbe(leftbinds, this.leftQueue, this.rightQueue);
+			ret = this.buildAndProbe(leftbinds, timestamp, delay, this.leftQueue, this.rightQueue);
 		}
 		else if(stream.equals(this.rightOverflow.getSource())){
 			Map<String, Node> rightbinds = this.getOutVarsMapping(this.rightVarsToOutVars, typed);
-			ret = this.buildAndProbe(rightbinds, this.rightQueue, this.leftQueue);
+			ret = this.buildAndProbe(rightbinds, timestamp, delay, this.rightQueue, this.leftQueue);
 		}
 		
 		ret.addAll(this.outputBuffer);
