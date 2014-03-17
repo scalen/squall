@@ -1,11 +1,9 @@
 package org.openimaj.rdf.storm.utils;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
@@ -26,7 +24,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	private static final Logger logger = Logger.getLogger(HashedCircularPriorityWindow.class);
 
 	private final Map<K,Set<V>> map;
-	private final Map<V,TimeWrapped<V>> timeMap;
+	private final Map<V,TimedMapEntry<K,V>> timeMap;
 	private final PriorityQueue<TimedMapEntry<K, V>> queue;
 	
 	protected final int semanticCapacity;
@@ -56,7 +54,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	 */
 	public HashedCircularPriorityWindow(OverflowHandler<V> handler, int queryCap, int maxCap, long delay, TimeUnit unit){
 		this.map = new HashMap<K, Set<V>>();
-		this.timeMap = new HashMap<V, TimeWrapped<V>>();
+		this.timeMap = new HashMap<V, TimedMapEntry<K,V>>();
 		this.queue = new PriorityQueue<TimedMapEntry<K,V>>(maxCap + 1);
 		
 		this.semanticCapacity = queryCap;
@@ -91,7 +89,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 		if (this.map.get(lastKey) == null){
 			System.out.println("This should never ever happen. Ever.");
 		}
-		if (this.timeMap.get(lastValue).getDelay(unit) == last.getDelay(unit)){
+		if (this.timeMap.get(lastValue).getDropTime() == last.getDropTime()){
 			this.map.get(lastKey).remove(lastValue);
 			if (this.map.get(lastKey).isEmpty()){
 				logger.debug("Removing the window of key: " + lastKey);
@@ -187,15 +185,19 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 			this.map.put(key, window);
 		}
 		
-		TimedMapEntry<K,V> tme = new TimedMapEntry<K,V>(key, value, timestamp, delay, unit);
+		TimedMapEntry<K,V> tme;
 		if (window.add(value)){
+			tme = new TimedMapEntry<K,V>(key, value, timestamp, delay, unit);
 			this.queue.add(tme);
 			this.pruneToCapacity();
 		} else {
-			TimeWrapped<V> existingEntry = this.timeMap.get(value); 
-			if (existingEntry.equals(tme)){
+			TimedMapEntry<K,V> existingEntry = this.timeMap.get(value);
+			value = existingEntry.getValue();
+			long newDroptime = timestamp + TimeUnit.MILLISECONDS.convert(delay, unit);
+			if (newDroptime <= existingEntry.getDropTime()){
 				return null;
 			}
+			tme = new TimedMapEntry<K,V>(existingEntry, timestamp, newDroptime);
 			this.queue.remove(existingEntry);
 			this.queue.add(tme);
 		}

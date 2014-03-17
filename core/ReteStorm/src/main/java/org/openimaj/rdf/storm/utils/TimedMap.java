@@ -82,6 +82,11 @@ public interface TimedMap<K, V> extends TimeLimitedCollection, Map<K, V> {
 			super(value, ts, delay, delayUnit);
 			this.key = key;
 		}
+		
+		protected TimedMapEntry(TimedMapEntry<K,V> toUpdate, long ts, long droptime) {
+			super(toUpdate, ts, droptime);
+			this.key = toUpdate.key;
+		}
 
 		@Override
 		public K getKey() {

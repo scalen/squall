@@ -33,6 +33,13 @@ public interface TimeLimitedCollection {
 			this.timestamp = ts;
 			this.droptime = ts + TimeUnit.MILLISECONDS.convert(delay, delayUnit);
 		}
+		
+		protected TimeWrapped (TimeWrapped<T> toUpdate, long ts, long droptime) {
+			this.wrapped = toUpdate.wrapped;
+			this.delayUnit = toUpdate.delayUnit;
+			this.timestamp = ts;
+			this.droptime = droptime;
+		}
 
 		@Override
 		public boolean equals(Object obj){
