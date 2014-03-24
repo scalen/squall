@@ -1,6 +1,7 @@
 package org.openimaj.squall.orchestrate.greedy;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -71,19 +72,8 @@ public class MapRETEQueue{
 	 * @param unit 
 	 * @return
 	 */
-	public Set<Map<String,Node>> offer(Map<String, Node> typed, long timestamp, long delay, TimeUnit unit) {
-		window.put(extractSharedBindings(typed), typed, timestamp, delay, unit);
-		return check(typed);
-	}
-	
-	/**
-	 * @param typed
-	 * @param timestamp 
-	 * @param delay 
-	 * @return
-	 */
-	public Set<Map<String,Node>> offer(Map<String, Node> typed, long timestamp, long delay) {
-		window.put(extractSharedBindings(typed), typed, timestamp, delay);
+	public Set<Map<String,Node>> offer(Map<String, Node> typed, long timestamp, long droptime) {
+		window.put(extractSharedBindings(typed), typed, timestamp, droptime);
 		return check(typed);
 	}
 	
@@ -124,7 +114,7 @@ public class MapRETEQueue{
 	private Set<Map<String,Node>> check(Map<String, Node> typed) {
 		Set<Map<String, Node>> ret = new HashSet<Map<String,Node>>();
 		DeepHashArray<Node> sharedBindings = extractSharedBindings(typed);
-		Set<Map<String, Node>> matchedQueue = sibling.window.getWindow(sharedBindings);
+		Set<Map<String, Node>> matchedQueue = sibling.window.getWindow(sharedBindings, new Date().getTime());
 		if (matchedQueue != null){
 			for (Map<String, Node> sibitem : matchedQueue) {
 				Map<String,Node> newbind = new HashMap<String, Node>();

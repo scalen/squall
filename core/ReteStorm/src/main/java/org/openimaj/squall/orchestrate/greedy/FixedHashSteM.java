@@ -1,6 +1,7 @@
 package org.openimaj.squall.orchestrate.greedy;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,13 +47,8 @@ public class FixedHashSteM implements TimestampedSteM<Map<String, Node>>{
 	}
 	
 	@Override
-	public boolean build(Map<String, Node> typed, long timestamp, long delay, TimeUnit unit) {
-		return window.put(extractSharedBindings(typed), typed, timestamp, delay, unit) != null;
-	}
-	
-	@Override
-	public boolean build(Map<String, Node> typed, long timestamp, long delay) {
-		return window.put(extractSharedBindings(typed), typed, timestamp, delay) != null;
+	public boolean build(Map<String, Node> typed, long timestamp, long droptime) {
+		return window.put(extractSharedBindings(typed), typed, timestamp, droptime) != null;
 	}
 	
 	@Override
@@ -84,7 +80,7 @@ public class FixedHashSteM implements TimestampedSteM<Map<String, Node>>{
 	public List<Map<String,Node>> probe(Map<String, Node> typed) {
 		List<Map<String, Node>> ret = new ArrayList<Map<String,Node>>();
 		DeepHashArray<Node> sharedBindings = extractSharedBindings(typed);
-		Set<Map<String, Node>> matchedQueue = this.window.getWindow(sharedBindings);
+		Set<Map<String, Node>> matchedQueue = this.window.getWindow(sharedBindings, new Date().getTime());
 		if (matchedQueue != null){
 			for (Map<String, Node> sibitem : matchedQueue) {
 				Map<String,Node> newbind = new HashMap<String, Node>();
@@ -101,12 +97,10 @@ public class FixedHashSteM implements TimestampedSteM<Map<String, Node>>{
 	}
 	
 	@Override
-	public List<TimeAnnotated<Map<String, Node>>> probe(Map<String, Node> typed, long timestamp, long delay, TimeUnit delayUnit) {
-		long newDropTime = timestamp + TimeUnit.MILLISECONDS.convert(delay, delayUnit);
-		
+	public List<TimeAnnotated<Map<String, Node>>> probe(Map<String, Node> typed, long timestamp, long droptime) {
 		List<TimeAnnotated<Map<String, Node>>> ret = new ArrayList<TimeAnnotated<Map<String,Node>>>();
 		DeepHashArray<Node> sharedBindings = extractSharedBindings(typed);
-		Set<TimeWrapped<Map<String, Node>>> matchedQueue = this.window.getTimedWindow(sharedBindings);
+		Set<TimeWrapped<Map<String, Node>>> matchedQueue = this.window.getTimedWindow(sharedBindings, timestamp);
 		if (matchedQueue != null){
 			for (TimeWrapped<Map<String, Node>> sibitem : matchedQueue) {
 				Map<String,Node> newbind = new HashMap<String, Node>();
@@ -118,7 +112,7 @@ public class FixedHashSteM implements TimestampedSteM<Map<String, Node>>{
 				}
 				ret.add(new TimeAnnotated<Map<String, Node>>(newbind,
 																Math.max(timestamp, sibitem.getTimestamp()),
-																Math.min(newDropTime, sibitem.getDropTime())
+																Math.min(droptime, sibitem.getDropTime())
 															));
 			}
 		}

@@ -36,36 +36,19 @@ public interface TimedMap<K, V> extends TimeLimitedCollection, Map<K, V> {
 	public V put(K key, V value, long timestamp);
 	
 	/**
-	 * Adds a new object of type T to the time-based priority queue, along with the timestamp related to the object and its intended life span in the queue (in milliseconds).
+	 * Adds a new object of type T to the time-based priority queue, along with the timestamp related to the object and its intended expiry time.
 	 * @param key 
 	 * 		the key by which to insert the datum
 	 * @param value
 	 * 		the datum
 	 * @param timestamp
 	 * 		an externally defined timestamp to be applied in the system.
-	 * @param delay
-	 * 		a datum-specific life span, defined in the unit of the Window
-	 * @return
-	 * 		whether the add was successful
-	 */
-	public V put(K key, V value, long timestamp, long delay);
-	
-	/**
-	 * Adds a new object of type T to the time-based priority queue, along with the timestamp related to the object and its intended life span in the queue, given in the specified time unit.
-	 * @param key 
-	 * 		the key by which to insert the datum
-	 * @param value
-	 * 		the datum
-	 * @param timestamp
+	 * @param droptime
 	 * 		an externally defined timestamp to be applied in the system.
-	 * @param delay
-	 * 		a datum-specific life span
-	 * @param unit
-	 * 		the time unit that the datum-specific life span is defined in
 	 * @return
 	 * 		whether the add was successful
 	 */
-	public V put(K key, V value, long timestamp, long delay, TimeUnit unit);
+	public V put(K key, V value, long timestamp, long droptime);
 	
 	/**
 	 * @author davidlmonks
@@ -77,9 +60,8 @@ public interface TimedMap<K, V> extends TimeLimitedCollection, Map<K, V> {
 
 		private final K key;
 		
-		protected TimedMapEntry(K key, V value, long ts, long delay,
-				TimeUnit delayUnit) {
-			super(value, ts, delay, delayUnit);
+		protected TimedMapEntry(K key, V value, long ts, long droptime) {
+			super(value, ts, droptime);
 			this.key = key;
 		}
 		

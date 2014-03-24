@@ -1,6 +1,5 @@
 package org.openimaj.rdf.storm.utils;
 
-import java.util.Date;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
 
@@ -22,21 +21,28 @@ public interface TimeLimitedCollection {
 	 */
 	public class TimeWrapped<T> implements Delayed {
 
+		private static long now = 0;
+		
+		/**
+		 * @param timestamp
+		 * @return
+		 */
+		public static long incrementNow(long timestamp){
+			return TimeWrapped.now = Math.max(TimeWrapped.now, timestamp);
+		}
+		
 		private long droptime;
 		private long timestamp;
-		private TimeUnit delayUnit;
 		protected T wrapped;
 
-		protected TimeWrapped (T toWrap, long ts, long delay, TimeUnit delayUnit) {
+		protected TimeWrapped (T toWrap, long ts, long droptime) {
 			this.wrapped = toWrap;
-			this.delayUnit = delayUnit;
 			this.timestamp = ts;
-			this.droptime = ts + TimeUnit.MILLISECONDS.convert(delay, delayUnit);
+			this.droptime = droptime;
 		}
 		
 		protected TimeWrapped (TimeWrapped<T> toUpdate, long ts, long droptime) {
 			this.wrapped = toUpdate.wrapped;
-			this.delayUnit = toUpdate.delayUnit;
 			this.timestamp = ts;
 			this.droptime = droptime;
 		}
@@ -44,10 +50,15 @@ public interface TimeLimitedCollection {
 		@Override
 		public boolean equals(Object obj){
 			if (obj instanceof TimeWrapped)
-				return getDelay(this.delayUnit) == TimeWrapped.class.cast(obj).getDelay(this.delayUnit)
+				return getDelay(TimeUnit.MILLISECONDS) == TimeWrapped.class.cast(obj).getDelay(TimeUnit.MILLISECONDS)
 						&& this.wrapped.equals(TimeWrapped.class.cast(obj).wrapped);
 			else
 				return this.wrapped.equals(obj);
+		}
+		
+		@Override
+		public int hashCode() {
+			return this.wrapped.hashCode();
 		}
 
 		@Override
@@ -57,7 +68,7 @@ public interface TimeLimitedCollection {
 
 		@Override
 		public long getDelay(TimeUnit arg0) {
-			return arg0.convert(droptime - new Date().getTime(),TimeUnit.MILLISECONDS);
+			return arg0.convert(droptime - TimeWrapped.now,TimeUnit.MILLISECONDS);
 		}
 		
 		/**

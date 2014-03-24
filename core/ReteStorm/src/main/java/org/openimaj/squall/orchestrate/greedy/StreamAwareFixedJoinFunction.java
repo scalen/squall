@@ -297,14 +297,17 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 	// builds the data into the proposed SteM, probing the other SteM where appropriate, maintaining time annotations received.
 	private List<Context> buildAndProbe(Map<String, Node> inBinds,
 										Long timestamp,
-										Long delay,
+										Long droptime,
 										FixedHashSteM buildSteM,
 										FixedHashSteM probeSteM){
-		if (timestamp == null || delay == null) return buildAndProbe(inBinds, buildSteM, probeSteM);
+		boolean built = false;
+		if (timestamp == null) return buildAndProbe(inBinds, buildSteM, probeSteM);
+		else if (droptime == null) built = buildSteM.build(inBinds,timestamp);
+		else built = buildSteM.build(inBinds,timestamp, droptime);
 		List<Context> ret = new ArrayList<Context>();
-		if (buildSteM.build(inBinds,timestamp,delay, TimeUnit.MILLISECONDS)){
+		if (built){
 			logger.debug("Joining Left Stream");
-			for (TimeAnnotated<Map<String, Node>> fullbindings : probeSteM.probe(inBinds, timestamp, delay, TimeUnit.MILLISECONDS)) {
+			for (TimeAnnotated<Map<String, Node>> fullbindings : probeSteM.probe(inBinds, timestamp, droptime)) {
 				logger.debug(String.format("Joined: %s -> %s", inBinds, fullbindings));
 				Context r = new Context();
 				r.put(ContextKey.BINDINGS_KEY.toString(),fullbindings.getWrapped());

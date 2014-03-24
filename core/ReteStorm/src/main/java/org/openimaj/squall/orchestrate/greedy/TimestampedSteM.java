@@ -9,25 +9,15 @@ import java.util.concurrent.TimeUnit;
  *
  */
 public interface TimestampedSteM <T> extends SteM <T> {
-
-	/**
-	 * @param typed
-	 * @param timestamp 
-	 * @param delay 
-	 * @param unit 
-	 * @return
-	 * 		True if the object 'typed' was successfully built into the SteM. False otherwise.
-	 */
-	public boolean build(T typed, long timestamp, long delay, TimeUnit unit);
 	
 	/**
 	 * @param typed
 	 * @param timestamp 
-	 * @param delay 
+	 * @param droptime
 	 * @return
 	 * 		True if the object 'typed' was successfully built into the SteM. False otherwise.
 	 */
-	public boolean build(T typed, long timestamp, long delay);
+	public boolean build(T typed, long timestamp, long droptime);
 	
 	/**
 	 * @param typed
@@ -40,12 +30,11 @@ public interface TimestampedSteM <T> extends SteM <T> {
 	/**
 	 * @param typed 
 	 * @param timestamp 
-	 * @param delay 
-	 * @param delayUnit 
+	 * @param droptime
 	 * @return
 	 * 		The list of objects in the SteM that match the object 'typed', wrapped with their individual timestamps and drop times.
 	 */
-	public List<TimeAnnotated<T>> probe(T typed, long timestamp, long delay, TimeUnit delayUnit);
+	public List<TimeAnnotated<T>> probe(T typed, long timestamp, long droptime);
 	
 	/**
 	 * @author David Monks <dm11g08@ecs.soton.ac.uk>

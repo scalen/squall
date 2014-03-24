@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -25,12 +26,10 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 
 	private final Map<K,Set<V>> map;
 	private final Map<V,TimedMapEntry<K,V>> timeMap;
-	private final PriorityQueue<TimedMapEntry<K, V>> queue;
+	private final Queue<TimedMapEntry<K, V>> queue;
 	
-	protected final int semanticCapacity;
-	protected final int maxCapacity;
+	protected final int capacity;
 	protected final long delay;
-	protected final TimeUnit unit;
 	protected final OverflowHandler<V> continuation;
 	
 	/**
@@ -41,26 +40,12 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	 * 
 	 */
 	public HashedCircularPriorityWindow(OverflowHandler<V> handler, int queryCap, long delay, TimeUnit unit){
-		this(handler, queryCap, queryCap*2, delay, unit);
-	}
-	
-	/**
-	 * @param handler 
-	 * @param queryCap 
-	 * @param maxCap 
-	 * @param delay 
-	 * @param unit 
-	 * 
-	 */
-	public HashedCircularPriorityWindow(OverflowHandler<V> handler, int queryCap, int maxCap, long delay, TimeUnit unit){
 		this.map = new HashMap<K, Set<V>>();
 		this.timeMap = new HashMap<V, TimedMapEntry<K,V>>();
-		this.queue = new PriorityQueue<TimedMapEntry<K,V>>(maxCap + 1);
+		this.queue = new PriorityQueue<TimedMapEntry<K,V>>(queryCap + 1);
 		
-		this.semanticCapacity = queryCap;
-		this.maxCapacity = maxCap;
-		this.unit = unit;
-		this.delay = delay;
+		this.capacity = queryCap;
+		this.delay = TimeUnit.MILLISECONDS.convert(delay, unit);
 		this.continuation = handler;
 	}
 	
@@ -90,6 +75,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 			System.out.println("This should never ever happen. Ever.");
 		}
 		if (this.timeMap.get(lastValue).getDropTime() == last.getDropTime()){
+			this.timeMap.remove(lastValue);
 			this.map.get(lastKey).remove(lastValue);
 			if (this.map.get(lastKey).isEmpty()){
 				logger.debug("Removing the window of key: " + lastKey);
@@ -102,7 +88,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	
 	@Override
 	public void pruneToCapacity() {
-		while (this.queue.size() > this.maxCapacity){
+		while (this.queue.size() > this.capacity){
 			this.overflowCapacity(this.removeOldest());
 		}
 	}
@@ -163,21 +149,18 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 
 	@Override
 	public V put(K key, V value) {
-		return this.put(key, value, new Date().getTime(), this.delay, this.unit);
+		long timestamp = new Date().getTime();
+		return this.put(key, value, timestamp);
 	}
 	
 	@Override
 	public V put(K key, V value, long timestamp) {
-		return this.put(key, value, timestamp, this.delay, this.unit);
+		long droptime = timestamp + this.delay;
+		return this.put(key, value, timestamp, droptime);
 	}
 
 	@Override
-	public V put(K key, V value, long timestamp, long delay) {
-		return this.put(key, value, timestamp, delay, this.unit);
-	}
-
-	@Override
-	public V put(K key, V value, long timestamp, long delay, TimeUnit unit) {
+	public V put(K key, V value, long timestamp, long droptime) {
 		Set<V> window = this.map.get(key);
 		if (window == null){
 			logger.debug("Adding the window for key: " + key);
@@ -186,18 +169,18 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 		}
 		
 		TimedMapEntry<K,V> tme;
+		TimedMapEntry<K,V> existingEntry;
 		if (window.add(value)){
-			tme = new TimedMapEntry<K,V>(key, value, timestamp, delay, unit);
+			tme = new TimedMapEntry<K,V>(key, value, timestamp, droptime);
 			this.queue.add(tme);
 			this.pruneToCapacity();
 		} else {
-			TimedMapEntry<K,V> existingEntry = this.timeMap.get(value);
+			existingEntry = this.timeMap.get(value);
 			value = existingEntry.getValue();
-			long newDroptime = timestamp + TimeUnit.MILLISECONDS.convert(delay, unit);
-			if (newDroptime <= existingEntry.getDropTime()){
+			if (droptime <= existingEntry.getDropTime()){
 				return null;
 			}
-			tme = new TimedMapEntry<K,V>(existingEntry, timestamp, newDroptime);
+			tme = new TimedMapEntry<K,V>(existingEntry, timestamp, droptime);
 			this.queue.remove(existingEntry);
 			this.queue.add(tme);
 		}
@@ -217,10 +200,13 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	 * Gets the sub queue of items added to this queue that matches the given key.
 	 * @param key
 	 * 		The key by which to retrieve items.
+	 * @param timestamp 
+	 * 		The time of the request
 	 * @return
 	 * 		The set of items that were added with the same key.  Returns null if there are no items with the given key.
 	 */
-	public Set<V> getWindow(K key){
+	public Set<V> getWindow(K key, long timestamp){
+		TimeWrapped.incrementNow(timestamp);
 		this.pruneToDuration();
 		return this.map.get(key);
 	}
@@ -229,10 +215,15 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMap<K,V>, SpaceL
 	 * Gets the sub queue of items added to this queue that matches the given key.  Items are returned with their associated timestamps.
 	 * @param key
 	 * 		The key by which to retrieve items.
+	 * @param timestamp 
+	 * 		The time of the request
 	 * @return
 	 * 		The set of items that were added with the same key, along with their most recent timestamps.  Returns null if there are no items with the given key.
 	 */
-	public Set<TimeWrapped<V>> getTimedWindow(K key){
+	public Set<TimeWrapped<V>> getTimedWindow(K key, long timestamp){
+		TimeWrapped.incrementNow(timestamp);
+		this.pruneToDuration();
+		
 		Set<TimeWrapped<V>> window = new HashSet<TimeWrapped<V>>();
 		
 		for (V w : this.map.get(key)){
