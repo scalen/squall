@@ -6,9 +6,7 @@ package org.openimaj.rdf.storm.utils;
 public interface SpaceLimitedCollection {
 
 	/**
-	 * Prunes items from the queue if they have expired at the time of the call (items are expired if their timestamp + duration &lt; Now).
-	 * @return
-	 * 		The number of items of data pruned from the queue.
+	 * Prunes the oldest items from the queue if it has exceeded the semantic capacity of the queue.
 	 */
 	public void pruneToCapacity();
 	

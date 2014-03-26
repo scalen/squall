@@ -39,7 +39,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.PriorityQueue;
-import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
 
 import org.openimaj.rdf.storm.utils.OverflowHandler.CapacityOverflowHandler;
@@ -57,7 +56,7 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 	static{
 		System.setProperty("java.util.Arrays.useLegacyMergeSort", "true");
 	}
-	protected PriorityQueue<TimeWrapped> queue;
+	protected PriorityQueue<TimeWrapped<T>> queue;
 	protected Map<T, Count> data;
 	protected final int capacity;
 	protected final long delay;
@@ -102,14 +101,15 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 
 	@Override
 	public void clear() {
-		this.queue = new PriorityQueue<TimeWrapped>(this.capacity + 1);
+		this.queue = new PriorityQueue<TimeWrapped<T>>(this.capacity + 1);
 		this.data = new HashMap<T,Count>();
 	}
 
 	@Override
-	public void pruneToDuration() {
-		Iterator<TimeWrapped> pruner = new Iterator<TimeWrapped>(){
-			TimeWrapped last;
+	public void pruneToDuration(long timestamp) {
+		TimeWrapped.incrementNow(timestamp);
+		Iterator<TimeWrapped<T>> pruner = new Iterator<TimeWrapped<T>>(){
+			TimeWrapped<T> last;
 			@Override
 			public boolean hasNext() {
 				last = queue.peek();
@@ -117,7 +117,7 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 				return last.getDelay(CircularPriorityWindow.this.unit) < 0;
 			}
 			@Override
-			public TimeWrapped next() {
+			public TimeWrapped<T> next() {
 				return last;
 			}
 			@Override
@@ -143,8 +143,8 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 	
 	@Override
 	public void pruneToCapacity() {
-		Iterator<TimeWrapped> pruner = new Iterator<TimeWrapped>(){
-			TimeWrapped last;
+		Iterator<TimeWrapped<T>> pruner = new Iterator<TimeWrapped<T>>(){
+			TimeWrapped<T> last;
 			@Override
 			public boolean hasNext() {
 				last = queue.peek();
@@ -152,7 +152,7 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 				return queue.size() > capacity;
 			}
 			@Override
-			public TimeWrapped next() {
+			public TimeWrapped<T> next() {
 				return last;
 			}
 			@Override
@@ -239,11 +239,7 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 	@Override
 	public boolean remove(Object arg0) {
 		try {
-			return queue.remove(arg0) && decrement(((Wrapped)arg0).getWrapped());
-		} catch (ClassCastException e) {}
-		try {
-			T arg = (T) arg0;
-			return queue.remove(new Wrapped(arg)) && decrement(arg);
+			return queue.remove(arg0) && decrement(((TimeWrapped<T>)arg0).getWrapped());
 		} catch (ClassCastException e) {}
 		return false;
 
@@ -260,15 +256,15 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 	@Override
 	public boolean retainAll(Collection<?> arg0) {
 		boolean removed = true;
-		List<TimeWrapped> removals = new ArrayList<TimeWrapped>();
-		for (TimeWrapped item : queue){
+		List<TimeWrapped<T>> removals = new ArrayList<TimeWrapped<T>>();
+		for (TimeWrapped<T> item : queue){
 			boolean toRemove = true;
 			for (Object keeper : arg0)
 				toRemove &= !item.equals(keeper);
 			if (toRemove)
 				removals.add(item);
 		}
-		for (TimeWrapped item : removals)
+		for (TimeWrapped<T> item : removals)
 			removed &= remove(item);
 		return removed;
 	}
@@ -283,7 +279,7 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 				success &= add((T)item);
 			} catch (ClassCastException e) {
 				try {
-					success &= add((TimeWrapped)item);
+					success &= add((TimeWrapped<T>)item);
 				} catch (ClassCastException ex) {
 					success = false;
 				}
@@ -302,10 +298,12 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 		return success;
 	}
 
-	private boolean add(TimeWrapped arg0){
-		pruneToDuration();
+	private boolean add(TimeWrapped<T> arg0){
 		if (arg0.getWrapped() == null) return false;
-		if (queue.size() >= capacity){
+		try {
+			return queue.add(arg0);
+		} catch (IllegalStateException ise) {
+			pruneToCapacity();
 			try {
 				((CapacityOverflowHandler<T>)continuation).handleCapacityOverflow(queue.remove().getWrapped());
 			} catch (NullPointerException e) {
@@ -313,9 +311,10 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 			} catch (ClassCastException e) {
 				queue.remove();
 			}
+			return queue.add(arg0);
+		} finally {
+			increment(arg0.getWrapped());
 		}
-		increment(arg0.getWrapped());
-		return queue.add(arg0);
 	}
 
 	@Override
@@ -336,7 +335,7 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 	
 	@Override
 	public boolean add(T arg0, long timestamp, long delay, TimeUnit unit) {
-		return add(new TimeWrapped(arg0,timestamp,delay,unit));
+		return add(new TimeWrapped<T>(arg0,timestamp,TimeUnit.MILLISECONDS.convert(delay,unit)));
 	}
 
 	@Override
@@ -377,7 +376,7 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 
 	@Override
 	public T element() {
-		pruneToDuration();
+		pruneToCapacity();
 		return queue.element().getWrapped();
 	}
 
@@ -401,7 +400,7 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 
 	@Override
 	public T remove() {
-		pruneToDuration();
+		pruneToCapacity();
 		T item = queue.remove().getWrapped();
 		decrement(item);
 		return item;
@@ -409,15 +408,15 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 
 	@Override
 	public Iterator <T> iterator() {
-		pruneToDuration();
+		pruneToCapacity();
 		try {
 			@SuppressWarnings("unchecked")
-			final List<TimeWrapped> dc = Arrays.asList(queue.toArray());
+			final List<TimeWrapped<T>> dc = Arrays.asList(queue.toArray());
 			Collections.sort(dc);
 			return new Iterator<T>(){
-				List<TimeWrapped> dataclone = dc;
+				List<TimeWrapped<T>> dataclone = dc;
 				int index = 0;
-				TimeWrapped last;
+				TimeWrapped<T> last;
 				@Override
 				public boolean hasNext() {
 					return index < dataclone.size();
@@ -458,73 +457,6 @@ public class CircularPriorityWindow <T> implements TimedQueue <T>, SpaceLimitedC
 	 */
 	public T removeNextToExpire(){
 		return this.queue.remove().getWrapped();
-	}
-
-	/**
-	 * Inner class used to represent a generic wrapper for the generic type T contained by the queue.
-	 */
-	private class Wrapped {
-
-		private T wrapped;
-
-		public Wrapped (T toWrap) {
-			this.wrapped = toWrap;
-		}
-
-		public T getWrapped() {
-			return this.wrapped;
-		}
-
-		@Override
-		public int hashCode(){
-			return this.wrapped.hashCode();
-		}
-
-		@SuppressWarnings("unchecked")
-		@Override
-		public boolean equals(Object obj){
-			try {
-				return this.wrapped.equals(((Wrapped)obj).getWrapped());
-			} catch (ClassCastException e) {}
-			try {
-				return this.wrapped.equals((T)obj);
-			} catch (ClassCastException ex) {}
-			return false;
-		}
-
-	}
-
-	/**
-	 * Inner class used to represent a timestamp wrapper for the generic type T contained by the queue.
-	 */
-	private class TimeWrapped extends Wrapped implements Delayed {
-
-		private long droptime;
-
-		public TimeWrapped (T toWrap, long ts, long delay, TimeUnit delayUnit) {
-			super(toWrap);
-			droptime = ts + TimeUnit.MILLISECONDS.convert(delay, delayUnit);
-		}
-
-		@Override
-		public boolean equals(Object obj){
-			if (obj.getClass().equals(TimeWrapped.class))
-				return getDelay(CircularPriorityWindow.this.unit) == this.getClass().cast(obj).getDelay(CircularPriorityWindow.this.unit)
-						&& getWrapped().equals(TimeWrapped.class.cast(obj).getWrapped());
-			else
-				return super.equals(obj);
-		}
-
-		@Override
-		public int compareTo(Delayed arg0) {
-			return (int) (arg0.getDelay(TimeUnit.MILLISECONDS) - getDelay(TimeUnit.MILLISECONDS));
-		}
-
-		@Override
-		public long getDelay(TimeUnit arg0) {
-			return arg0.convert(droptime - (new Date()).getTime(),TimeUnit.MILLISECONDS);
-		}
-
 	}
 
 }

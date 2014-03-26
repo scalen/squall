@@ -1,7 +1,7 @@
 package org.openimaj.rdf.storm.utils;
 
+import java.util.Collection;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author David Monks <dm11g08@ecs.soton.ac.uk>
@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
  * @param <K>
  * @param <V>
  */
-public interface TimedMap<K, V> extends TimeLimitedCollection, Map<K, V> {
+public interface TimedMultiMap<K, V> extends TimeLimitedCollection, Map<K, V> {
 	
 	/**
 	 * Adds a new object of type T to the time-based priority queue.  A timestamp should be generated for the object by the Collection.
@@ -20,6 +20,7 @@ public interface TimedMap<K, V> extends TimeLimitedCollection, Map<K, V> {
 	 * @return
 	 * 		whether the add was successful
 	 */
+	@Override
 	public V put(K key, V value);
 	
 	/**
@@ -49,6 +50,28 @@ public interface TimedMap<K, V> extends TimeLimitedCollection, Map<K, V> {
 	 * 		whether the add was successful
 	 */
 	public V put(K key, V value, long timestamp, long droptime);
+	
+	/**
+	 * Gets the Collection of items added to this map that matches the given key.
+	 * @param key
+	 * 		The key by which to retrieve items.
+	 * @param timestamp 
+	 * 		The time of the request
+	 * @return
+	 * 		The set of items that were added with the same key.  Returns null if there are no items with the given key.
+	 */
+	public Collection<V> getAll(K key, long timestamp);
+	
+	/**
+	 * Gets the Collection of items added to this map that matches the given key.  Items are returned with their associated timestamps.
+	 * @param key
+	 * 		The key by which to retrieve items.
+	 * @param timestamp 
+	 * 		The time of the request
+	 * @return
+	 * 		The set of items that were added with the same key, along with their most recent timestamps.  Returns null if there are no items with the given key.
+	 */
+	public Collection<TimeWrapped<V>> getTimed(K key, long timestamp);
 	
 	/**
 	 * @author davidlmonks

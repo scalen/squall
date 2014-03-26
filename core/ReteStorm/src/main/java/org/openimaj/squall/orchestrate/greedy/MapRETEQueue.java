@@ -1,26 +1,21 @@
 package org.openimaj.squall.orchestrate.greedy;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
-
-import org.openimaj.rdf.storm.utils.CircularPriorityWindow;
 import org.openimaj.rdf.storm.utils.DeepHashArray;
 import org.openimaj.rdf.storm.utils.HashedCircularPriorityWindow;
 import org.openimaj.rdf.storm.utils.OverflowHandler;
+import org.openimaj.rdf.storm.utils.OverflowHandler.CapacityOverflowHandler;
+import org.openimaj.rdf.storm.utils.OverflowHandler.DurationOverflowHandler;
 import org.openimaj.squall.orchestrate.WindowInformation;
 
-import scala.actors.threadpool.Arrays;
-
 import com.hp.hpl.jena.graph.Node;
-import com.hp.hpl.jena.graph.Node_Concrete;
 
 /**
  * @author David Monks <dm11g08@ecs.soton.ac.uk>
@@ -28,13 +23,9 @@ import com.hp.hpl.jena.graph.Node_Concrete;
  */
 public class MapRETEQueue{
 	
-//	private static final int capacity = 1000;
-//	private static final long duration = 1;
-//	private static final TimeUnit unit = TimeUnit.MINUTES;
-	
-	MapRETEQueue sibling;
-	HashedCircularPriorityWindow<DeepHashArray<Node>,Map<String,Node>> window;
-	List<String> sharedVariables; // must match the sibling stream
+	private MapRETEQueue sibling;
+	private HashedCircularPriorityWindow<DeepHashArray<Node>,Map<String,Node>> window;
+	private List<String> sharedVariables; // must match the sibling stream
 	
 	/**
 	 * @param sharedVariables
@@ -43,7 +34,9 @@ public class MapRETEQueue{
 	public MapRETEQueue(List<String> sharedVariables, WindowInformation wi) {
 		this.sharedVariables = sharedVariables;
 		
-		window = new HashedCircularPriorityWindow<DeepHashArray<Node>,Map<String,Node>>(null, wi.getCapacity(), wi.getDuration(), wi.getGranularity());
+		window = new HashedCircularPriorityWindow<DeepHashArray<Node>,Map<String,Node>>(null,
+																						null,
+																						wi);
 	}
 	
 	/**
@@ -54,7 +47,14 @@ public class MapRETEQueue{
 	public MapRETEQueue(OverflowHandler<Map<String, Node>> handler, List<String> sharedVariables, WindowInformation wi) {
 		this.sharedVariables = sharedVariables;
 		
-		window = new HashedCircularPriorityWindow<DeepHashArray<Node>,Map<String,Node>>(handler, wi.getCapacity(), wi.getDuration(), wi.getGranularity());
+		CapacityOverflowHandler<Map<String, Node>> capHandler =
+				handler instanceof CapacityOverflowHandler ? (CapacityOverflowHandler<Map<String, Node>>)handler : null;
+		DurationOverflowHandler<Map<String, Node>> durHandler =
+				handler instanceof DurationOverflowHandler ? (DurationOverflowHandler<Map<String, Node>>)handler : null;
+		
+		window = new HashedCircularPriorityWindow<DeepHashArray<Node>,Map<String,Node>>(capHandler,
+																						durHandler,
+																						wi);
 	}
 	
 	/**
@@ -68,8 +68,7 @@ public class MapRETEQueue{
 	/**
 	 * @param typed
 	 * @param timestamp 
-	 * @param delay 
-	 * @param unit 
+	 * @param droptime 
 	 * @return
 	 */
 	public Set<Map<String,Node>> offer(Map<String, Node> typed, long timestamp, long droptime) {
@@ -114,7 +113,7 @@ public class MapRETEQueue{
 	private Set<Map<String,Node>> check(Map<String, Node> typed) {
 		Set<Map<String, Node>> ret = new HashSet<Map<String,Node>>();
 		DeepHashArray<Node> sharedBindings = extractSharedBindings(typed);
-		Set<Map<String, Node>> matchedQueue = sibling.window.getWindow(sharedBindings, new Date().getTime());
+		Collection<Map<String, Node>> matchedQueue = sibling.window.getAll(sharedBindings, new Date().getTime());
 		if (matchedQueue != null){
 			for (Map<String, Node> sibitem : matchedQueue) {
 				Map<String,Node> newbind = new HashMap<String, Node>();

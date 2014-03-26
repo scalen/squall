@@ -1,6 +1,7 @@
 package org.openimaj.squall.compile.data.source;
 
 import java.io.InputStream;
+import java.util.Date;
 import java.util.Iterator;
 
 import org.apache.jena.riot.Lang;
@@ -36,7 +37,12 @@ public class NTriplesProfileFunction implements
 
 		@Override
 		public Context next() {
-			return new Context(ContextKey.TRIPLE_KEY.toString(),iter.next());
+			long now = new Date().getTime();
+			return new Context(
+								ContextKey.TRIPLE_KEY.toString(),iter.next(),
+								ContextKey.TIMESTAMP_KEY.toString(),now,
+								ContextKey.DROPTIME_KEY.toString(),now+1000
+							);
 		}
 	}
 

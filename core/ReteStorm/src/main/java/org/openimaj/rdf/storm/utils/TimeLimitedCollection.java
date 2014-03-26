@@ -9,11 +9,10 @@ import java.util.concurrent.TimeUnit;
 public interface TimeLimitedCollection {
 
 	/**
-	 * Prunes items from the queue if they have expired at the time of the call (items are expired if their timestamp + duration &lt; Now).
-	 * @return
-	 * 		The number of items of data pruned from the queue.
+	 * Prunes items from the queue if they have expired at the time of the call (items are expired if their timestamp + duration &lt; the most recent timestamp received).
+	 * @param timestamp 
 	 */
-	public void pruneToDuration();
+	public void pruneToDuration(long timestamp);
 
 	/**
 	 * Inner class used to represent a timestamped MapEntry for the generic type V contained by the queue and its key of type K.
@@ -35,7 +34,12 @@ public interface TimeLimitedCollection {
 		private long timestamp;
 		protected T wrapped;
 
-		protected TimeWrapped (T toWrap, long ts, long droptime) {
+		/**
+		 * @param toWrap
+		 * @param ts
+		 * @param droptime
+		 */
+		public TimeWrapped (T toWrap, long ts, long droptime) {
 			this.wrapped = toWrap;
 			this.timestamp = ts;
 			this.droptime = droptime;
@@ -63,7 +67,7 @@ public interface TimeLimitedCollection {
 
 		@Override
 		public int compareTo(Delayed arg0) {
-			return (int) (arg0.getDelay(TimeUnit.MILLISECONDS) - getDelay(TimeUnit.MILLISECONDS));
+			return (int) (getDelay(TimeUnit.MILLISECONDS) - arg0.getDelay(TimeUnit.MILLISECONDS));
 		}
 
 		@Override
@@ -90,6 +94,25 @@ public interface TimeLimitedCollection {
 		 */
 		public long getDropTime(){
 			return this.droptime;
+		}
+		
+		@Override
+		public String toString() {
+			return new StringBuilder("[ ")
+					.append(this.wrapped.toString())
+					.append(", ")
+					.append(this.timestamp)
+					.append(", ")
+					.append(this.droptime)
+					.append(" ]")
+					.toString();
+		}
+
+		/**
+		 * @return
+		 */
+		public static long getNow() {
+			return TimeWrapped.now;
 		}
 
 	}

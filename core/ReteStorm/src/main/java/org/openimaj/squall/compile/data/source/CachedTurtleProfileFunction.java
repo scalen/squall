@@ -3,6 +3,7 @@ package org.openimaj.squall.compile.data.source;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.Iterator;
 
 import org.apache.jena.riot.Lang;
@@ -48,8 +49,12 @@ public class CachedTurtleProfileFunction implements Function<InputStream, Stream
 
 		@Override
 		public Context next() {
-			Context context = new Context(ContextKey.TRIPLE_KEY.toString(),iter.next());
-			return context;
+			long now = new Date().getTime();
+			return new Context(
+								ContextKey.TRIPLE_KEY.toString(),iter.next(),
+								ContextKey.TIMESTAMP_KEY.toString(),now,
+								ContextKey.DROPTIME_KEY.toString(),now+1000
+							);
 		}
 	}
 

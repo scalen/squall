@@ -38,7 +38,12 @@ public enum ContextKey {
 	/**
 	 * 
 	 */
-	DURATION_KEY("duration")
+	DROPTIME_KEY("duration")
+	, 
+	/**
+	 * 
+	 */
+	RULE_KEY("rule")
 	;
 	
 	private String key;

@@ -12,9 +12,9 @@ import java.util.concurrent.TimeUnit;
 import org.apache.log4j.Logger;
 import org.openimaj.rdf.storm.utils.OverflowHandler.CapacityOverflowHandler;
 import org.openimaj.rdf.storm.utils.OverflowHandler.DurationOverflowHandler;
+import org.openimaj.rdf.storm.utils.TimeLimitedCollection.TimeWrapped;
 import org.openimaj.squall.orchestrate.NamedNode;
 import org.openimaj.squall.orchestrate.WindowInformation;
-import org.openimaj.squall.orchestrate.greedy.TimestampedSteM.TimeAnnotated;
 import org.openimaj.squall.compile.data.AnonimisedRuleVariableHolder;
 import org.openimaj.squall.compile.data.IFunction;
 import org.openimaj.squall.compile.data.RuleWrappedFunction;
@@ -302,17 +302,19 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 										FixedHashSteM probeSteM){
 		boolean built = false;
 		if (timestamp == null) return buildAndProbe(inBinds, buildSteM, probeSteM);
-		else if (droptime == null) built = buildSteM.build(inBinds,timestamp);
-		else built = buildSteM.build(inBinds,timestamp, droptime);
+		else if (droptime == null) {
+			built = buildSteM.build(inBinds,timestamp);
+			droptime = Long.MAX_VALUE;
+		} else built = buildSteM.build(inBinds,timestamp, droptime);
 		List<Context> ret = new ArrayList<Context>();
 		if (built){
 			logger.debug("Joining Left Stream");
-			for (TimeAnnotated<Map<String, Node>> fullbindings : probeSteM.probe(inBinds, timestamp, droptime)) {
+			for (TimeWrapped<Map<String, Node>> fullbindings : probeSteM.probe(inBinds, timestamp, droptime)) {
 				logger.debug(String.format("Joined: %s -> %s", inBinds, fullbindings));
 				Context r = new Context();
 				r.put(ContextKey.BINDINGS_KEY.toString(),fullbindings.getWrapped());
 				r.put(ContextKey.TIMESTAMP_KEY.toString(), fullbindings.getTimestamp());
-				r.put(ContextKey.DURATION_KEY.toString(), fullbindings.getDropTime()-fullbindings.getTimestamp());
+				r.put(ContextKey.DROPTIME_KEY.toString(), fullbindings.getDropTime());
 				ret.add(r);
 			}
 		}
@@ -323,7 +325,7 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 	public List<Context> apply(Context in) {
 		String stream = in.getTyped(ContextKey.STREAM_KEY.toString());
 		Long timestamp = in.getTyped(ContextKey.TIMESTAMP_KEY.toString());
-		Long delay = in.getTyped(ContextKey.DURATION_KEY.toString());
+		Long delay = in.getTyped(ContextKey.DROPTIME_KEY.toString());
 		logger.debug(String.format("JOIN: Received input from %s, checking against %s and %s",
 										stream,
 										this.leftOverflow.getSource(),

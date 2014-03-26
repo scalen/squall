@@ -2,66 +2,32 @@ package org.openimaj.squall.compile.rif;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Serializable;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.junit.Test;
 import org.openimaj.rifcore.RIFRuleSet;
 import org.openimaj.rifcore.imports.profiles.RIFEntailmentImportProfiles;
 import org.openimaj.squall.build.Builder;
 import org.openimaj.squall.build.storm.StormStreamBuilder;
 import org.openimaj.squall.compile.CompiledProductionSystem;
+import org.openimaj.squall.compile.CountingOperation;
 import org.openimaj.squall.compile.data.IOperation;
 import org.openimaj.squall.compile.rif.providers.predicates.ExternalLoader;
 import org.openimaj.squall.orchestrate.OrchestratedProductionSystem;
-import org.openimaj.squall.orchestrate.greedy.CombinedSourceGreedyOrchestrator;
 import org.openimaj.squall.orchestrate.rete.CombinedSourceTPLOReteOrchestrator;
 import org.openimaj.util.data.Context;
+import org.openimaj.util.data.ContextKey;
 import org.xml.sax.SAXException;
-
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
 
 /**
  * @author Sina Samangooei (ss@ecs.soton.ac.uk)
+ * @author David Monks &lt;dm11g08@ecs.soton.ac.uk&gt;
  *
  */
 public class TestRifRuleCompilerCombinedSourceTPLOReteOrchestratorStormBuilder {
-	
-	@SuppressWarnings("serial")
-	private static final class PrintAllOperation implements IOperation<Context>, Serializable {
-		@Override
-		public void setup() {
-			System.out.println("Starting Test");
-		}
-
-		@Override
-		public void cleanup() {
-		}
-
-		@Override
-		public void perform(Context object) { 
-			System.out.println(object);
-		}
-
-		@Override
-		public void write(Kryo kryo, Output output) {}
-		@Override
-		public void read(Kryo kryo, Input input) {}
-
-		@Override
-		public boolean isStateless() {
-			return true;
-		}
-
-		@Override
-		public boolean forcedUnique() {
-			return false;
-		}
-	}
-
-
 
 	private RIFRuleSet readRules(String ruleSource) {
 		RIFRuleSet rules = null;
@@ -88,7 +54,8 @@ public class TestRifRuleCompilerCombinedSourceTPLOReteOrchestratorStormBuilder {
 	 */
 	@Test
 	public void testSimpleRulesBuilder(){
-		testRuleSet(readRules("/test.simple.rule.rif"), 5000);
+		IOperation<Context> op = new CountingOperation(2);
+		testRuleSet(readRules("/test.simple.rule.rif"), op, 5000);
 	}
 	
 	/**
@@ -96,7 +63,8 @@ public class TestRifRuleCompilerCombinedSourceTPLOReteOrchestratorStormBuilder {
 	 */
 	@Test
 	public void testSimpleJoinBuilder(){
-		testRuleSet(readRules("/test.simplejoin.rule.rif"), 5000);
+		IOperation<Context> op = new CountingOperation(1);
+		testRuleSet(readRules("/test.simplejoin.rule.rif"), op, 5000);
 	}
 	
 	/**
@@ -104,7 +72,8 @@ public class TestRifRuleCompilerCombinedSourceTPLOReteOrchestratorStormBuilder {
 	 */
 	@Test
 	public void testComplexRules(){
-		testRuleSet(readRules("/test.complexjoin.rule.rif"), 5000);
+		IOperation<Context> op = new CountingOperation(1);
+		testRuleSet(readRules("/test.complexjoin.rule.rif"), op, 5000);
 	}
 	
 	/**
@@ -112,7 +81,8 @@ public class TestRifRuleCompilerCombinedSourceTPLOReteOrchestratorStormBuilder {
 	 */
 	@Test
 	public void testMultiUnionRules(){
-		testRuleSet(readRules("/test.multiunion.rule.rif"), 5000);
+		IOperation<Context> op = new CountingOperation(3);
+		testRuleSet(readRules("/test.multiunion.rule.rif"), op, 5000);
 	}
 	
 	/**
@@ -120,13 +90,14 @@ public class TestRifRuleCompilerCombinedSourceTPLOReteOrchestratorStormBuilder {
 	 */
 	@Test
 	public void testLSBenchRulesBuilder(){
-		testRuleSet(readRules("/lsbench/queries/rif/query-7.5-with-small-test-data.rif"), 5000);
+		Map<String, String> filters = new HashMap<String, String>();
+		filters.put(ContextKey.RULE_KEY.toString(), ".*lsbench-query.*");
+		IOperation<Context> op = new CountingOperation(2, filters);
+		testRuleSet(readRules("/lsbench/queries/rif/query-7.5-with-small-test-data.rif"), op, 5000);
 	}
 	
-	private void testRuleSet(RIFRuleSet ruleSet, int sleep) {
+	private void testRuleSet(RIFRuleSet ruleSet, IOperation<Context> op, int sleep) {
 		ExternalLoader.loadExternals();
-		
-		IOperation<Context> op = new PrintAllOperation();
 
 		RIFCoreRuleCompiler jrc = new RIFCoreRuleCompiler();
 		CompiledProductionSystem comp = jrc.compile(ruleSet);

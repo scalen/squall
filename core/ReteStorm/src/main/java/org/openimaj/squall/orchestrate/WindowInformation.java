@@ -11,7 +11,6 @@ public class WindowInformation {
 	private int capacity = 1000;
 	private long duration = Long.MAX_VALUE; 
 	private TimeUnit unit = TimeUnit.DAYS;
-	
 	private boolean respectItemLimits = true;
 	
 	/**
