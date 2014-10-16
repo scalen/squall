@@ -259,38 +259,46 @@ public class RIFRuleSet implements Iterable<RIFGroup> {
 			return;
 		}
 		
-		InputStream resourceAsStream = this.schemeMap.get(loc.getScheme()).getInputStream(loc);
-		if (prof == null){
-			try {
-				this.parserMap.parse(resourceAsStream, this.profile.peek(), this);
-			} catch (ProfileNotSupportedException e) {
-				this.imports.put(loc, this.profile.peek());
-			} catch (IOException e){
-				throw new RuntimeException("IO Error on location "+loc+" with core profile",e);
-			} catch (SAXException e) {
-				throw new RuntimeException("Parsing Error on location "+loc+" with core profile",e);
-			} catch (UnsupportedOperationException e) {
-				throw new RuntimeException("Unsupported operation while processing "+loc+" with core profile",e);
-			} catch (Exception e) {
-				throw new RuntimeException("Exception while processing "+loc+" with core profile",e);
-			}
-			return;
-		}
-		this.profile.push(prof);
 		try {
-			this.parserMap.parse(resourceAsStream, prof, this);
-		} catch (ProfileNotSupportedException e) {
-			this.imports.put(loc, prof);
-		} catch (IOException e){
-			throw new RuntimeException("IO Error on location "+loc+" with profile "+prof,e);
-		} catch (SAXException e) {
-			throw new RuntimeException("Parsing Error on location "+loc+" with profile "+prof,e);
-		} catch (UnsupportedOperationException e) {
-			throw new RuntimeException("Unsupported operation while processing "+loc+" with profile "+prof,e);
-		} catch (Exception e) {
-			throw new RuntimeException("Exception while processing "+loc+" with profile"+prof,e);
-		} finally {
-			this.profile.pop();
+			InputStream resourceAsStream = this.schemeMap.get(loc.getScheme()).getInputStream(loc);
+			if (prof == null){
+				try {
+					this.parserMap.parse(resourceAsStream, this.profile.peek(), this);
+				} catch (ProfileNotSupportedException e) {
+					this.imports.put(loc, this.profile.peek());
+				} catch (IOException e){
+					throw new RuntimeException("IO Error on location "+loc+" with core profile",e);
+				} catch (SAXException e) {
+					throw new RuntimeException("Parsing Error on location "+loc+" with core profile",e);
+				} catch (UnsupportedOperationException e) {
+					throw new RuntimeException("Unsupported operation while processing "+loc+" with core profile",e);
+				} catch (Exception e) {
+					throw new RuntimeException("Exception while processing "+loc+" with core profile",e);
+				}
+				return;
+			}
+			this.profile.push(prof);
+			try {
+				this.parserMap.parse(resourceAsStream, prof, this);
+			} catch (ProfileNotSupportedException e) {
+				this.imports.put(loc, prof);
+			} catch (IOException e){
+				throw new RuntimeException("IO Error on location "+loc+" with profile "+prof,e);
+			} catch (SAXException e) {
+				throw new RuntimeException("Parsing Error on location "+loc+" with profile "+prof,e);
+			} catch (UnsupportedOperationException e) {
+				throw new RuntimeException("Unsupported operation while processing "+loc+" with profile "+prof,e);
+			} catch (Exception e) {
+				throw new RuntimeException("Exception while processing "+loc+" with profile"+prof,e);
+			} finally {
+				this.profile.pop();
+			}
+		} catch (NullPointerException e){
+			if (prof == null){
+				this.imports.put(loc, this.profile.peek());
+			} else {
+				this.imports.put(loc, prof);
+			}
 		}
 	}
 	
