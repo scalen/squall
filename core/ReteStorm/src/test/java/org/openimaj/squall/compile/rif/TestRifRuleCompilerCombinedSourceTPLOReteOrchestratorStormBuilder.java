@@ -18,7 +18,7 @@ import org.openimaj.squall.compile.CountingOperation;
 import org.openimaj.squall.compile.data.IOperation;
 import org.openimaj.squall.compile.rif.providers.predicates.ExternalLoader;
 import org.openimaj.squall.orchestrate.OrchestratedProductionSystem;
-import org.openimaj.squall.orchestrate.rete.CombinedSourceTPLOReteOrchestrator;
+import org.openimaj.squall.orchestrate.tplo.CombinedSourceTPLOOrchestrator;
 import org.openimaj.util.data.Context;
 import org.openimaj.util.data.ContextKey;
 import org.xml.sax.SAXException;
@@ -108,7 +108,7 @@ public class TestRifRuleCompilerCombinedSourceTPLOReteOrchestratorStormBuilder {
 		RIFCoreRuleCompiler jrc = new RIFCoreRuleCompiler();
 		CompiledProductionSystem comp = jrc.compile(ruleSet);
 		
-		CombinedSourceTPLOReteOrchestrator go = new CombinedSourceTPLOReteOrchestrator();
+		CombinedSourceTPLOOrchestrator go = new CombinedSourceTPLOOrchestrator();
 		OrchestratedProductionSystem orchestrated = go.orchestrate(comp, op );
 		
 		Builder builder = StormStreamBuilder.localClusterBuilder(sleep);

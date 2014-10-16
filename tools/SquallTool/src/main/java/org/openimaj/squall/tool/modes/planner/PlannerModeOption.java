@@ -25,6 +25,24 @@ public enum PlannerModeOption implements CmdLineOptionsProvider{
 		public PlannerMode getOptions() {
 			return new CombinedSourceGreedyPlannerMode();
 		}
+	},
+	/**
+	 * 
+	 */
+	TPLO {
+		@Override
+		public PlannerMode getOptions() {
+			return new TPLOPlannerMode();
+		}
+	},
+	/**
+	 * 
+	 */
+	TPLOCS {
+		@Override
+		public PlannerMode getOptions() {
+			return new CombinedSourceTPLOPlannerMode();
+		}
 	};
 
 	@Override

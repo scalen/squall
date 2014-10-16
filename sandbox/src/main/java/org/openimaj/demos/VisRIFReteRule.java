@@ -12,7 +12,7 @@ import org.openimaj.squall.compile.rif.RIFCoreRuleCompiler;
 import org.openimaj.squall.compile.rif.providers.predicates.ExternalLoader;
 import org.openimaj.squall.data.ISource;
 import org.openimaj.squall.orchestrate.OrchestratedProductionSystem;
-import org.openimaj.squall.orchestrate.rete.CombinedSourceTPLOReteOrchestrator;
+import org.openimaj.squall.orchestrate.tplo.CombinedSourceTPLOOrchestrator;
 import org.openimaj.squall.utils.JenaUtils;
 import org.openimaj.squall.utils.OPSDisplayUtils;
 import org.openimaj.util.data.Context;
@@ -123,7 +123,7 @@ public class VisRIFReteRule {
 		
 		RIFCoreRuleCompiler jrc = new RIFCoreRuleCompiler();
 		CompiledProductionSystem comp = jrc.compile(rules);
-		CombinedSourceTPLOReteOrchestrator go = new CombinedSourceTPLOReteOrchestrator();
+		CombinedSourceTPLOOrchestrator go = new CombinedSourceTPLOOrchestrator();
 		IOperation<Context> op = new PrintAllOperation();
 		OrchestratedProductionSystem orchestrated = go.orchestrate(comp, op );
 		
