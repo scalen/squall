@@ -30,6 +30,21 @@ public interface TimeLimitedCollection {
 			return TimeWrapped.now = Math.max(TimeWrapped.now, timestamp);
 		}
 		
+		/**
+		 * @param timestamp
+		 * @return
+		 */
+		public static long resetNow(){
+			return TimeWrapped.now = 0;
+		}
+		
+		/**
+		 * @return
+		 */
+		public static long getNow() {
+			return TimeWrapped.now;
+		}
+		
 		private long droptime;
 		private long timestamp;
 		protected T wrapped;
@@ -106,13 +121,6 @@ public interface TimeLimitedCollection {
 					.append(this.droptime)
 					.append(" ]")
 					.toString();
-		}
-
-		/**
-		 * @return
-		 */
-		public static long getNow() {
-			return TimeWrapped.now;
 		}
 
 	}

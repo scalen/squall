@@ -181,27 +181,27 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 	 * @param value
 	 * @param droptime
 	 * @return
-	 * 		true - if the key is in the map and the value is associated with a the droptime.
-	 * 		false - otherwise.  
+	 * 		TimedMapEntry<K,V> - if the key is in the map and the value is associated with the droptime.
+	 * 		null - otherwise.  
 	 */
 	public boolean remove (K key, V value, long droptime){
-		TimedMapEntry<K, V> a = this.timeMap.get(value);
-		return this.removeFromMap(key, value, droptime) && this.queue.remove(a);
+		TimedMapEntry<K, V> a;
+		return (a = this.removeFromMap(key, value, droptime)) != null && this.queue.remove(a);
 	}
 	
-	private boolean removeFromMap (K key, V value, long droptime){
+	private TimedMapEntry<K,V> removeFromMap (K key, V value, long droptime){
 		logger.debug("Removing from key: " + key);
 		try {
-			TimedMapEntry<K,V> tme = timeMap.get(value);
+			TimedMapEntry<K,V> tme = this.timeMap.get(value);
 			if (tme.getDropTime() == droptime){
 				try {
-					if (map.get(key).remove(value)){
-						timeMap.remove(value);
-						if (map.get(key).isEmpty()){
+					if (this.map.get(key).remove(value)){
+						this.timeMap.remove(value);
+						if (this.map.get(key).isEmpty()){
 							logger.debug("Removing the window of key: " + key);
-							map.remove(key);
+							this.map.remove(key);
 						}
-						return true;
+						return tme;
 					}
 				} catch (NullPointerException e) {
 					logger.debug("Window did not contain any values with key: " + key);
@@ -212,7 +212,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 		} catch (NullPointerException e) {
 			logger.error("Value not time annotated: " + value);
 		}
-		return false;
+		return null;
 	}
 
 	@Override
@@ -287,7 +287,8 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 		//from first to last (leaving the head of the queue as the element at index "start", barring re-ordering).
 		protected void repopulate(TimedMapEntry<K,V>[] arr, int start, int length){
 			this.queue.clear();
-			for (int i = start; i < length; i ++){
+			int stop = start + length;
+			for (int i = start; i < stop; i ++){
 				this.add(arr[i]);
 			}
 		}
@@ -295,7 +296,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 		//orders elements smallest at index 0 to largest at index n.
 		protected TimedMapEntry<K,V>[] prioritise(){
 			@SuppressWarnings("unchecked")
-			TimedMapEntry<K,V>[] tmec = new TimedMapEntry[this.size()];
+			TimedMapEntry<K,V>[] tmec = new TimedMapEntry[this.queue.size()];
 			Arrays.sort(this.queue.toArray(tmec));
 			return tmec;
 		}
@@ -317,7 +318,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 		@Override
 		public TimedMapEntry<K, V> poll() {
 			TimedMapEntry<K,V> last = this.queue.remove();
-			if (last != null && HashedCircularPriorityWindow.this.removeFromMap(last.getKey(), last.getValue(), last.getDropTime())){
+			if (last != null && HashedCircularPriorityWindow.this.removeFromMap(last.getKey(), last.getValue(), last.getDropTime()) != null){
 				return last;
 			}
 			return null;
@@ -368,9 +369,10 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 		
 		@Override
 		public boolean add(TimedMapEntry<K, V> e) {
+			boolean ret = this.queue.add(e);
 			if (this.queue.size() >= this.maxCap)
 				this.pruneToCapacity();
-			return this.queue.add(e);
+			return ret;
 		}
 		
 		@Override
@@ -448,6 +450,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 		
 	}
 	
+	@SuppressWarnings("unused")
 	private class JITPQ extends PruneableQueue {
 
 		protected Queue<TimedMapEntry<K,V>> initQueue(int cap){
@@ -476,7 +479,7 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 				HashedCircularPriorityWindow.this.removeFromMap(tmec[i].getKey(), tmec[i].getValue(), tmec[i].getDropTime());
 				this.overflowCapacity(tmec[i].getValue());
 			}
-			this.repopulate(tmec, i, this.capacity());
+			this.repopulate(tmec, i, tmec.length - i);
 		}
 		
 		//O((n+d)log(n+d) + n + 3d)
@@ -485,11 +488,11 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 			TimeWrapped.incrementNow(timestamp);
 			TimedMapEntry<K,V>[] tmec = this.prioritise();
 			int i;
-			for (i = 0; tmec[i].getDelay(TimeUnit.MILLISECONDS) > 0; i++){
+			for (i = 0; i < tmec.length ? tmec[i].getDelay(TimeUnit.MILLISECONDS) < 0 : false; i++){
 				HashedCircularPriorityWindow.this.removeFromMap(tmec[i].getKey(), tmec[i].getValue(), tmec[i].getDropTime());
 				this.overflowDuration(tmec[i].getValue());
 			}
-			this.repopulate(tmec, i, tmec.length - i);
+			this.repopulate(tmec, i - 1, tmec.length - i);
 		}
 		
 		//O((n+d)log(n+d) + n + 3d) where m = n+d
@@ -498,11 +501,11 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 			TimeWrapped.incrementNow(timestamp);
 			TimedMapEntry<K,V>[] tmec = this.prioritise();
 			int i;
-			for (i = 0; tmec[i].getDelay(TimeUnit.MILLISECONDS) > 0; i++){
+			for (i = 0; i < tmec.length ? tmec[i].getDelay(TimeUnit.MILLISECONDS) < 0 : false; i++){
 				HashedCircularPriorityWindow.this.removeFromMap(tmec[i].getKey(), tmec[i].getValue(), tmec[i].getDropTime());
 				this.overflowDuration(tmec[i].getValue());
 			}
-			for (i = 0; i + this.capacity() < tmec.length; i++){
+			for (; i + this.capacity() < tmec.length; i++){
 				HashedCircularPriorityWindow.this.removeFromMap(tmec[i].getKey(), tmec[i].getValue(), tmec[i].getDropTime());
 				this.overflowCapacity(tmec[i].getValue());
 			}

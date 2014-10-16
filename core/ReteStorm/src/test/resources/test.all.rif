@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE Document [
+  <!ENTITY rif  "http://www.w3.org/2007/rif#">
+  <!ENTITY pred "http://www.w3.org/2007/rif-builtin-predicate#">
+  <!ENTITY xs   "http://www.w3.org/2001/XMLSchema#">
+  <!ENTITY rdf  "http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <!ENTITY rdfs "http://www.w3.org/2000/01/rdf-schema#">
+  <!ENTITY ex   "http://example.com/">
+]>
+
+<Document xmlns="&rif;">
+	<directive>
+		<Import>
+			<location>java:///test.simple.rule.rif</location>
+		</Import>
+	</directive>
+	<directive>
+		<Import>
+			<location>java:///test.simplejoin.rule.rif</location>
+		</Import>
+	</directive>
+	<directive>
+		<Import>
+			<location>java:///test.complexjoin.rule.rif</location>
+		</Import>
+	</directive>
+	<directive>
+		<Import>
+			<location>java:///test.multiunion.rule.rif</location>
+		</Import>
+	</directive>
+</Document>

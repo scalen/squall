@@ -25,19 +25,19 @@
   </directive>
   <directive>
     <Import>
-    	<location>java:///lsbench/data/post.nt</location>
+    	<location>java:///lsbench/smalldata/post.nt</location>
     	<profile>http://www.w3.org/ns/stream/Turtle</profile>
     </Import>
   </directive>
   <directive>
     <Import>
-    	<location>java:///lsbench/data/photo.nt</location>
+    	<location>java:///lsbench/smalldata/photo.nt</location>
     	<profile>http://www.w3.org/ns/stream/Turtle</profile>
     </Import>
   </directive>
   <directive>
     <Import>
-    	<location>java:///lsbench/data/photolike.nt</location>
+    	<location>java:///lsbench/smalldata/photolike.nt</location>
     	<profile>http://www.w3.org/ns/stream/Turtle</profile>
     </Import>
   </directive>

@@ -10,6 +10,7 @@ import java.net.URISyntaxException;
 import org.junit.Test;
 import org.openimaj.rifcore.RIFRuleSet;
 import org.openimaj.rifcore.imports.profiles.RIFEntailmentImportProfiles;
+import org.openimaj.rifcore.imports.profiles.RIFImportProfiles.ProfileNotSupportedException;
 import org.openimaj.squall.compile.rif.TestRifRuleCompilerGreedyOrchestratorStormBuilder;
 import org.xml.sax.SAXException;
 
@@ -40,6 +41,9 @@ public class TestRIFParsing {
 		} catch (SAXException e) {
 			e.printStackTrace();
 		} catch (URISyntaxException e) {
+			e.printStackTrace();
+		} catch (ProfileNotSupportedException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		System.out.println(rules);

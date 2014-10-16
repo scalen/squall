@@ -6,10 +6,12 @@ import java.io.InputStream;
 import java.io.Serializable;
 import java.net.URI;
 import java.net.URISyntaxException;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.openimaj.rifcore.RIFRuleSet;
 import org.openimaj.rifcore.imports.profiles.RIFEntailmentImportProfiles;
+import org.openimaj.rifcore.imports.profiles.RIFImportProfiles.ProfileNotSupportedException;
 import org.openimaj.squall.build.Builder;
 import org.openimaj.squall.build.storm.StormStreamBuilder;
 import org.openimaj.squall.compile.CompiledProductionSystem;
@@ -30,6 +32,7 @@ import com.esotericsoftware.kryo.io.Output;
  */
 public class TestRifRuleCompilerCombinedSourceGreedyOrchestratorStormBuilder {
 	
+	@SuppressWarnings("serial")
 	private static final class PrintAllOperation implements IOperation<Context>, Serializable {
 		@Override
 		public void setup() {
@@ -82,6 +85,8 @@ public class TestRifRuleCompilerCombinedSourceGreedyOrchestratorStormBuilder {
 					resourceAsStream,
 					new URI("http://www.w3.org/ns/entailment/Core")
 				);
+		} catch (ProfileNotSupportedException e) {
+			e.printStackTrace();
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (SAXException e) {

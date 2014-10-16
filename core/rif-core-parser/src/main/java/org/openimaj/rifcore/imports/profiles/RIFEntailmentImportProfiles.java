@@ -35,9 +35,12 @@ public class RIFEntailmentImportProfiles extends RIFImportProfiles <RIFEntailmen
 	 * @return 
 	 * @throws IOException 
 	 * @throws SAXException 
+	 * @throws ProfileNotSupportedException 
 	 */
-	public RIFRuleSet parse(URI loc, URI prof) throws IOException, SAXException{
-		return this.get(prof).importToRuleSet(loc, new RIFRuleSet(prof,this));
+	public RIFRuleSet parse(URI loc, URI prof) throws IOException, SAXException, ProfileNotSupportedException{
+		RIFEntailmentImportHandler eih = this.get(prof); 
+		if (eih == null) throw new ProfileNotSupportedException(prof);
+		return eih.importToRuleSet(loc,  new RIFRuleSet(prof,this));
 	}
 	
 	/**
@@ -46,9 +49,12 @@ public class RIFEntailmentImportProfiles extends RIFImportProfiles <RIFEntailmen
 	 * @return 
 	 * @throws IOException 
 	 * @throws SAXException 
+	 * @throws ProfileNotSupportedException 
 	 */
-	public RIFRuleSet parse(InputStream is, URI prof) throws IOException, SAXException{
-		return this.get(prof).importToRuleSet(is, new RIFRuleSet(prof,this));
+	public RIFRuleSet parse(InputStream is, URI prof) throws IOException, SAXException, ProfileNotSupportedException{
+		RIFEntailmentImportHandler eih = this.get(prof); 
+		if (eih == null) throw new ProfileNotSupportedException(prof);
+		return eih.importToRuleSet(is,  new RIFRuleSet(prof,this));
 	}
 	
 	/**
@@ -58,9 +64,12 @@ public class RIFEntailmentImportProfiles extends RIFImportProfiles <RIFEntailmen
 	 * @return 
 	 * @throws IOException 
 	 * @throws SAXException 
+	 * @throws ProfileNotSupportedException 
 	 */
-	public RIFRuleSet parse(URI loc, URI prof, RIFRuleSet ruleSet) throws IOException, SAXException{
-		return this.get(prof).importToRuleSet(loc, ruleSet);
+	public RIFRuleSet parse(URI loc, URI prof, RIFRuleSet ruleSet) throws IOException, SAXException, ProfileNotSupportedException{
+		RIFEntailmentImportHandler eih = this.get(prof); 
+		if (eih == null) throw new ProfileNotSupportedException(prof);
+		return eih.importToRuleSet(loc, ruleSet);
 	}
 	
 	/**
@@ -69,9 +78,12 @@ public class RIFEntailmentImportProfiles extends RIFImportProfiles <RIFEntailmen
 	 * @return 
 	 * @throws IOException 
 	 * @throws SAXException 
+	 * @throws ProfileNotSupportedException 
 	 */
-	public RIFRuleSet parse(InputStream is, URI prof, RIFRuleSet ruleSet) throws IOException, SAXException{
-		return this.get(prof).importToRuleSet(is, ruleSet);
+	public RIFRuleSet parse(InputStream is, URI prof, RIFRuleSet ruleSet) throws IOException, SAXException, ProfileNotSupportedException{
+		RIFEntailmentImportHandler eih = this.get(prof); 
+		if (eih == null) throw new ProfileNotSupportedException(prof);
+		return eih.importToRuleSet(is, ruleSet);
 	}
 	
 }

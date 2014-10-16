@@ -10,6 +10,7 @@ import java.util.Map;
 import org.junit.Test;
 import org.openimaj.rifcore.RIFRuleSet;
 import org.openimaj.rifcore.imports.profiles.RIFEntailmentImportProfiles;
+import org.openimaj.rifcore.imports.profiles.RIFImportProfiles.ProfileNotSupportedException;
 import org.openimaj.squall.build.Builder;
 import org.openimaj.squall.build.storm.StormStreamBuilder;
 import org.openimaj.squall.compile.CompiledProductionSystem;
@@ -39,11 +40,7 @@ public class TestRifRuleCompilerCombinedSourceTPLOReteOrchestratorStormBuilder {
 					resourceAsStream,
 					new URI("http://www.w3.org/ns/entailment/Core")
 				);
-		} catch (IOException e) {
-			e.printStackTrace();
-		} catch (SAXException e) {
-			e.printStackTrace();
-		} catch (URISyntaxException e) {
+		} catch (IOException | SAXException | URISyntaxException | ProfileNotSupportedException e) {
 			e.printStackTrace();
 		}
 		return rules;
@@ -83,6 +80,15 @@ public class TestRifRuleCompilerCombinedSourceTPLOReteOrchestratorStormBuilder {
 	public void testMultiUnionRules(){
 		IOperation<Context> op = new CountingOperation(3);
 		testRuleSet(readRules("/test.multiunion.rule.rif"), op, 5000);
+	}
+	
+	/**
+	 * 
+	 */
+	@Test
+	public void testAllRules(){
+		IOperation<Context> op = new CountingOperation(7);
+		testRuleSet(readRules("/test.all.rif"), op, 5000);
 	}
 	
 	/**

@@ -25,8 +25,8 @@ import com.hp.hpl.jena.graph.Node;
  */
 public class FixedHashSteM implements TimestampedSteM<Map<String, Node>>{
 	
-	TimedMultiMap<DeepHashArray<Node>,Map<String,Node>> window;
-	List<String> sharedVariables; // must match the sibling stream
+	private TimedMultiMap<DeepHashArray<Node>,Map<String,Node>> window;
+	private List<String> sharedVariables;
 	
 	/**
 	 * @param sharedVariables
@@ -74,7 +74,7 @@ public class FixedHashSteM implements TimestampedSteM<Map<String, Node>>{
 		int i = 0;
 		for (String key : this.sharedVariables){
 			Node node = binds.get(key);
-			if(node.isConcrete()){
+			if(node != null && node.isConcrete()){
 				vals.set(i++, node);
 				continue;
 			} else {

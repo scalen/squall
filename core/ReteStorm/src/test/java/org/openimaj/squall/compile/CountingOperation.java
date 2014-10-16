@@ -8,9 +8,10 @@ import org.openimaj.squall.compile.data.IOperation;
 import org.openimaj.util.data.Context;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+
+import static org.junit.Assert.*;
 
 /**
  * @author Sina Samangooei (ss@ecs.soton.ac.uk)
@@ -56,14 +57,11 @@ public final class CountingOperation implements IOperation<Context>, Serializabl
 
 	@Override
 	public void cleanup() {
-		if(this.count != this.expected){
-			String msg = String.format("THE TEST FAILED Expected %d saw %d",this.expected,this.count);
-			System.out.println(msg);
-			throw new RuntimeException(msg);
-		}
-		else{
-			System.out.println("Success!");
-		}
+		assertTrue(
+				String.format("THE TEST FAILED Expected %d saw %d",this.expected,this.count),
+				this.count == this.expected
+		);
+		System.out.println("Success!");
 	}
 
 	@Override

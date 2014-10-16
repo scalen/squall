@@ -1,0 +1,527 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE Document [
+  <!ENTITY rif  	"http://www.w3.org/2007/rif#">
+  <!ENTITY xs   	"http://www.w3.org/2001/XMLSchema#">
+  <!ENTITY rdf  	"http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <!ENTITY rdfs		"http://www.w3.org/2000/01/rdf-schema#">
+  <!ENTITY sib  	"http://www.ins.cwi.nl/sib/vocabulary/">
+  <!ENTITY sibpred  "http://www.ins.cwi.nl/sib/rif-builtin-predicate/">
+  <!ENTITY foaf 	"http://xmlns.com/foaf/0.1/">
+  <!ENTITY sioc 	"http://rdfs.org/sioc/ns#">
+  <!ENTITY dbpprop	"http://dbpedia.org/property/">
+]>
+
+<Document>
+  <payload>
+  	<Group>
+  	<sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-knows</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>user</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>inphoto</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+  	      	        <Frame>
+      	              <object>
+      	                <Var>user</Var>
+      	              </object>
+      	              <slot ordered="yes">
+      	                <Const type="&rif;iri">http://xmlns.com/foaf/0.1/knows</Const>
+      	                <Var>inphoto</Var>
+      	              </slot>
+      	            </Frame>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">knows</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>user</Var>
+  	      	      	<Var>inphoto</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-likes</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>photo</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>likedby</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+  	      	        <Frame>
+      	              <object>
+      	                <Var>likedby</Var>
+      	              </object>
+      	              <slot ordered="yes">
+      	                <Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/like</Const>
+      	                <Var>photo</Var>
+      	              </slot>
+      	            </Frame>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">likes</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	      	<Var>likedby</Var>
+  	      	      	<Var>photo</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-taggedin</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>photo</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>inphoto</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+  	      	        <Frame>
+      	              <object>
+      	                <Var>photo</Var>
+      	              </object>
+      	              <slot ordered="yes">
+      	                <Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/usertag</Const>
+      	                <Var>inphoto</Var>
+      	              </slot>
+      	            </Frame>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">taggedin</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	      	<Var>inphoto</Var>
+  	      	      	<Var>photo</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-photoatlong</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>photo</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>photolong</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+			  	            <Frame>
+			      	          <object>
+			      	            <Var>photo</Var>
+			      	          </object>
+			      	          <slot ordered="yes">
+			      	            <Const type="&rif;iri">http://dbpedia.org/property/longd</Const>
+			      	            <Var>photolong</Var>
+			      	          </slot>
+			      	        </Frame>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">photoatlong</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>photo</Var>
+  	      	        <Var>photolong</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-photoatlat</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>photo</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>photolat</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+			  	            <Frame>
+			      	          <object>
+			      	            <Var>photo</Var>
+			      	          </object>
+			      	          <slot ordered="yes">
+			      	            <Const type="&rif;iri">http://dbpedia.org/property/latd</Const>
+			      	            <Var>photolat</Var>
+			      	          </slot>
+			      	        </Frame>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">photoatlat</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>photo</Var>
+  	      	      	<Var>photolat</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-visited</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>user</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>gps</Var>
+  	      </declare>
+  	      <formula>
+  	        <Implies>
+  	          <if>
+			  	                    <Frame>
+					      	          <object>
+					      	            <Var>user</Var>
+					      	          </object>
+					      	          <slot ordered="yes">
+					      	            <Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/visited</Const>
+					      	            <Var>gps</Var>
+					      	          </slot>
+					      	        </Frame>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">visited</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>user</Var>
+  	      	        <Var>gps</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-gpsatlong</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>gps</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>userlong</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+			  	                    <Frame>
+					      	          <object>
+					      	            <Var>gps</Var>
+					      	          </object>
+					      	          <slot ordered="yes">
+					      	            <Const type="&rif;iri">http://dbpedia.org/property/longd</Const>
+					      	            <Var>userlong</Var>
+					      	          </slot>
+					      	        </Frame>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">gpsatlong</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>gps</Var>
+  	      	        <Var>userlong</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-gpsatlat</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>gps</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>userlat</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+			  	                    <Frame>
+					      	          <object>
+					      	            <Var>gps</Var>
+					      	          </object>
+					      	          <slot ordered="yes">
+					      	            <Const type="&rif;iri">http://dbpedia.org/property/latd</Const>
+					      	            <Var>userlat</Var>
+					      	          </slot>
+					      	        </Frame>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">gpsatlat</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>gps</Var>
+  	      	        <Var>userlat</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-extra1</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>gps</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>userlat</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+			  	                    <Atom>
+					      	          <op>
+					      	            <Const type="&rif;local">gpsatlat</Const>
+					      	          </op>
+					      	          <args ordered="yes">
+					      	            <Var>gps</Var>
+					      	            <Var>userlat</Var>
+					      	          </args>
+					      	        </Atom>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">extra</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>gps</Var>
+  	      	        <Var>userlat</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-extra2</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>gps</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>userlong</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+			  	                    <Atom>
+					      	          <op>
+					      	            <Const type="&rif;local">gpsatlong</Const>
+					      	          </op>
+					      	          <args ordered="yes">
+					      	            <Var>gps</Var>
+					      	            <Var>userlong</Var>
+					      	          </args>
+					      	        </Atom>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">extra</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>gps</Var>
+  	      	        <Var>userlong</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-extra3</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>photo</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>userlat</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+			  	                    <Atom>
+					      	          <op>
+					      	            <Const type="&rif;local">photoatlat</Const>
+					      	          </op>
+					      	          <args ordered="yes">
+					      	            <Var>photo</Var>
+					      	            <Var>userlat</Var>
+					      	          </args>
+					      	        </Atom>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">extra</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>photo</Var>
+  	      	        <Var>userlat</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-extra4</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>photo</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>userlong</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+			  	                    <Atom>
+					      	          <op>
+					      	            <Const type="&rif;local">photoatlong</Const>
+					      	          </op>
+					      	          <args ordered="yes">
+					      	            <Var>photo</Var>
+					      	            <Var>userlong</Var>
+					      	          </args>
+					      	        </Atom>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">extra</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>photo</Var>
+  	      	        <Var>userlong</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	  <sentence>
+  	    <Forall>
+  	      <id>
+  	      	<Const type="&rif;iri">http://www.ins.cwi.nl/sib/vocabulary/lsbench-query-NOT</Const>
+  	      </id>
+  	      <declare>
+  	      	<Var>photo</Var>
+  	      </declare>
+  	      <declare>
+  	      	<Var>userlong</Var>
+  	      </declare>
+  	      <formula>
+  	      	<Implies>
+  	      	  <if>
+			  	                    <Atom>
+					      	          <op>
+					      	            <Const type="&rif;local">extra</Const>
+					      	          </op>
+					      	          <args ordered="yes">
+					      	            <Var>photo</Var>
+					      	            <Var>userlong</Var>
+					      	          </args>
+					      	        </Atom>
+  	      	  </if>
+  	      	  <then>
+  	      	    <Atom>
+  	      	      <op>
+  	      	        <Const type="&rif;local">bindings</Const>
+  	      	      </op>
+  	      	      <args ordered="yes">
+  	      	        <Var>photo</Var>
+  	      	        <Var>userlong</Var>
+  	      	      </args>
+  	      	    </Atom>
+  	      	  </then>
+  	      	</Implies>
+  	      </formula>
+  	    </Forall>
+  	  </sentence>
+  	</Group>
+  </payload>
+</Document>

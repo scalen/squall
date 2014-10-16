@@ -7,6 +7,7 @@ import java.net.URISyntaxException;
 
 import org.openimaj.rifcore.RIFRuleSet;
 import org.openimaj.rifcore.imports.profiles.RIFEntailmentImportProfiles;
+import org.openimaj.rifcore.imports.profiles.RIFImportProfiles.ProfileNotSupportedException;
 import org.openimaj.rifcore.imports.schemes.RIFImportSchemes;
 import org.xml.sax.SAXException;
 
@@ -69,7 +70,7 @@ public class RifUtils {
 					is,
 					profile
 				);
-		} catch (IOException | SAXException e) {
+		} catch (IOException | SAXException | ProfileNotSupportedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}

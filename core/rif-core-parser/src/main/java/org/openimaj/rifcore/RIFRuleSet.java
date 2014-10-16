@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.Stack;
 
 import org.openimaj.rifcore.imports.profiles.RIFEntailmentImportProfiles;
+import org.openimaj.rifcore.imports.profiles.RIFImportProfiles.ProfileNotSupportedException;
 import org.openimaj.rifcore.imports.profiles.RIFOWLImportProfiles;
 import org.openimaj.rifcore.imports.schemes.RIFImportSchemes;
 import org.openimaj.rifcore.rules.RIFGroup;
@@ -253,35 +254,43 @@ public class RIFRuleSet implements Iterable<RIFGroup> {
 	 * @param prof
 	 */
 	public void addImport(URI loc, URI prof) {
-		try {
-			if (this.parserMap == null){
-				this.imports.put(loc, prof);
-				return;
-			}
-			
-			InputStream resourceAsStream = this.schemeMap.get(loc.getScheme()).getInputStream(loc);
-			if (prof == null){
+		if (this.parserMap == null){
+			this.imports.put(loc, prof);
+			return;
+		}
+		
+		InputStream resourceAsStream = this.schemeMap.get(loc.getScheme()).getInputStream(loc);
+		if (prof == null){
+			try {
 				this.parserMap.parse(resourceAsStream, this.profile.peek(), this);
-				return;
+			} catch (ProfileNotSupportedException e) {
+				this.imports.put(loc, this.profile.peek());
+			} catch (IOException e){
+				throw new RuntimeException("IO Error on location "+loc+" with core profile",e);
+			} catch (SAXException e) {
+				throw new RuntimeException("Parsing Error on location "+loc+" with core profile",e);
+			} catch (UnsupportedOperationException e) {
+				throw new RuntimeException("Unsupported operation while processing "+loc+" with core profile",e);
+			} catch (Exception e) {
+				throw new RuntimeException("Exception while processing "+loc+" with core profile",e);
 			}
-			this.profile.push(prof);
+			return;
+		}
+		this.profile.push(prof);
+		try {
 			this.parserMap.parse(resourceAsStream, prof, this);
-			this.profile.pop();
-		} catch (NullPointerException e) {
-//			e.printStackTrace();
+		} catch (ProfileNotSupportedException e) {
 			this.imports.put(loc, prof);
-		} catch (IOException e) {
-//			e.printStackTrace();
-			this.imports.put(loc, prof);
+		} catch (IOException e){
+			throw new RuntimeException("IO Error on location "+loc+" with profile "+prof,e);
 		} catch (SAXException e) {
-//			e.printStackTrace();
-			this.imports.put(loc, prof);
+			throw new RuntimeException("Parsing Error on location "+loc+" with profile "+prof,e);
 		} catch (UnsupportedOperationException e) {
-//			e.printStackTrace();
-			this.imports.put(loc, prof);
+			throw new RuntimeException("Unsupported operation while processing "+loc+" with profile "+prof,e);
 		} catch (Exception e) {
-			e.printStackTrace();
-			this.imports.put(loc, prof);
+			throw new RuntimeException("Exception while processing "+loc+" with profile"+prof,e);
+		} finally {
+			this.profile.pop();
 		}
 	}
 	

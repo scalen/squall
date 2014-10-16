@@ -4,10 +4,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.openimaj.rifcore.RIFRuleSet;
 import org.openimaj.rifcore.imports.profiles.RIFEntailmentImportProfiles;
+import org.openimaj.rifcore.imports.profiles.RIFImportProfiles.ProfileNotSupportedException;
 import org.openimaj.squall.build.OIStreamBuilder;
 import org.openimaj.squall.compile.CompiledProductionSystem;
 import org.openimaj.squall.compile.data.IOperation;
@@ -79,6 +81,9 @@ public class TestRifRuleCompilerGreedyOrchestratorOIBuilder {
 		} catch (SAXException e) {
 			e.printStackTrace();
 		} catch (URISyntaxException e) {
+			e.printStackTrace();
+		} catch (ProfileNotSupportedException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return rules;
