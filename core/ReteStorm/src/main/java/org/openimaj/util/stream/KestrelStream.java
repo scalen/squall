@@ -56,7 +56,7 @@ public class KestrelStream<T> extends AbstractStream<T>{
 
 	private static final int HOLD_ITEMS = 1000;
 	private static final int TIMEOUT = 100;
-	private static final Logger logger = Logger.getLogger(UnreliableKestrelThriftSpout.class);
+	private static final Logger logger = Logger.getLogger(KestrelStream.class);
 	private List<KestrelServerSpec> clients;
 	private Queue<EmitItem> tuples;
 	private String queue;
