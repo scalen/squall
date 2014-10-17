@@ -152,19 +152,21 @@ public class KestrelStream<T> extends AbstractStream<T>{
 
 	@Override
 	public boolean hasNext() {
-		return true;
+		if (this.tuples.size() == 0){
+			getSomeMoreTuples();
+		}
+		return this.tuples.size() > 0;
 	}
 
 	@Override
 	public T next() {
-		getSomeMoreTuples();
-		if (this.tuples.size() == 0)
-		{
+		try {
+			final EmitItem poll = this.tuples.poll();
+			logger.debug(String.format("Emitting: %s", poll.tuple));
+			return poll.tuple;
+		} catch (NullPointerException e){
 			return null;
 		}
-		final EmitItem poll = this.tuples.poll();
-		logger.debug(String.format("Emitting: %s", poll.tuple));
-		return poll.tuple;
 	}
 
 }
