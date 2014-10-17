@@ -334,14 +334,14 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 					);
 		List<Context> ret = new ArrayList<Context>();
 		
-		Map<String, Node> typed = in.getTyped(ContextKey.BINDINGS_KEY.toString());
-		logger.debug(String.format("Joining: %s with %s", this, typed));
+		Map<String, Node> bindings = in.getTyped(ContextKey.BINDINGS_KEY.toString());
+		logger.debug(String.format("Joining: %s with %s", this, bindings));
 		if(stream.equals(this.leftOverflow.getSource())){
-			Map<String, Node> leftbinds = this.getOutVarsMapping(this.leftVarsToOutVars, typed);
+			Map<String, Node> leftbinds = this.getOutVarsMapping(this.leftVarsToOutVars, bindings);
 			ret = this.buildAndProbe(leftbinds, timestamp, delay, this.leftQueue, this.rightQueue);
 		}
 		else if(stream.equals(this.rightOverflow.getSource())){
-			Map<String, Node> rightbinds = this.getOutVarsMapping(this.rightVarsToOutVars, typed);
+			Map<String, Node> rightbinds = this.getOutVarsMapping(this.rightVarsToOutVars, bindings);
 			ret = this.buildAndProbe(rightbinds, timestamp, delay, this.rightQueue, this.leftQueue);
 		}
 		
