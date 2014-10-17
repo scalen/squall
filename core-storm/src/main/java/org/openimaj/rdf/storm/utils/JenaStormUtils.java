@@ -32,6 +32,7 @@ package org.openimaj.rdf.storm.utils;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.List;
 
@@ -453,9 +454,15 @@ public class JenaStormUtils {
 		@Override
 		public void write(Kryo kryo, Output output, Context object) {
 			output.writeInt(object.size());
-			for (String key : object.keySet()) {
-				output.writeString(key);
-				kryo.writeClassAndObject(output, object.get(key));
+			try{
+				for (String key : object.keySet()) {
+					output.writeString(key);
+					kryo.writeClassAndObject(output, object.get(key));
+				}
+			} catch (ConcurrentModificationException e){
+				String context = "{ ";
+				for (String key : object.keySet()) context += key + " => " + object.get(key).toString() + ", ";
+				throw new ConcurrentModificationException("Unexpected Modification of "+context+" }",e);
 			}
 		}
 
