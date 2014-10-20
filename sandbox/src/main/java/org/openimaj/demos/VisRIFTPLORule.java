@@ -26,7 +26,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.hp.hpl.jena.graph.Triple;
 import com.hp.hpl.jena.reasoner.rulesys.Rule;
 
-public class VisRIFReteRule {
+public class VisRIFTPLORule {
 	static class PrintAllOperation implements IOperation<Context> {
 		@Override
 		public void setup() {
@@ -75,7 +75,7 @@ public class VisRIFReteRule {
 		
 		@Override
 		public void setup() { 
-			nTripleStream = VisRIFReteRule.class.getResourceAsStream("/test.rdfs");
+			nTripleStream = VisRIFTPLORule.class.getResourceAsStream("/test.rdfs");
 		}
 		
 		@Override
@@ -106,7 +106,7 @@ public class VisRIFReteRule {
 	};
 	
 	private static List<Rule> loadRules(String stream) {
-		InputStream ruleStream = VisRIFReteRule.class.getResourceAsStream(stream);
+		InputStream ruleStream = VisRIFTPLORule.class.getResourceAsStream(stream);
 		List<Rule> rules = JenaUtils.readRules(ruleStream);
 		return rules;
 	}
@@ -117,7 +117,7 @@ public class VisRIFReteRule {
 		ExternalLoader.loadExternals();
 		
 //		String ruleSource = "file:///Users/davidlmonks/squall/core/ReteStorm/src/test/resources/lsbench/queries/rif/query-7.5-with-small-test-data.rif";
-		String ruleSource = "file:///Users/davidlmonks/squall/core/ReteStorm/src/test/resources/test.multiunion.rule.rif";
+		String ruleSource = "file:///Users/david.monks/squall/tools/SquallTool/lsbench/query/DavidsKestrelQuery6.rif";
 		
 		RIFRuleSet rules = RifUtils.readRules(ruleSource);
 		
