@@ -43,7 +43,11 @@ public abstract class ProcessingBolt extends NamedNodeComponent implements IRich
 	
 	@Override
 	public void fire(String strm, Tuple anchor, Values ctx) {
-		this.collector.emit(strm, ctx);
+		if (anchor == null){
+			this.collector.emit(strm, ctx);
+		} else {
+			this.collector.emit(strm, anchor, ctx);
+		}
 	}
 
 }

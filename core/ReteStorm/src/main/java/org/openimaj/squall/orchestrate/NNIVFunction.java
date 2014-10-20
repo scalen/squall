@@ -30,7 +30,7 @@ public class NNIVFunction<T extends RuleWrapped<? extends IFunction<Context,Cont
 						T func) {
 		super(parent, name);
 		this.varFunc = func;
-		this.wrapped = new WrappedIFunction(this.varFunc.getWrapped(), (NamedNode<?>) this);
+		this.wrapped = new WrappedIFunction(this.varFunc.getWrapped(), name);
 	}
 	
 	@Override

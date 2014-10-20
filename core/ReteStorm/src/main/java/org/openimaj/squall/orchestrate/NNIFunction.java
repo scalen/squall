@@ -25,7 +25,7 @@ public class NNIFunction extends NamedNode<IFunction<Context, Context>> {
 	public NNIFunction(OrchestratedProductionSystem parent, String name, IFunction<Context, Context> func) {
 		super(parent, name);
 		this.varfunc = func;
-		this.wrapped = new WrappedIFunction(func, this);
+		this.wrapped = new WrappedIFunction(func, name);
 	}
 	
 	public IFunction<Context, Context> getData(){
