@@ -1,5 +1,6 @@
 package org.openimaj.squall.orchestrate.greedy;
 
+import java.security.InvalidParameterException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -286,6 +287,14 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 			logger.debug("Joining Left Stream");
 			for (Map<String, Node> fullbindings : probeSteM.probe(inBinds)) {
 				logger.debug(String.format("Joined: %s -> %s", inBinds, fullbindings));
+Set<String> outVars = new HashSet<String>();
+outVars.addAll(this.leftVarsToOutVars.values());
+outVars.addAll(this.rightVarsToOutVars.values());
+logger.error(String.format("expected ouput bindings: %s", outVars));
+logger.error(String.format("achieved ouput bindings: %s", fullbindings));
+if (fullbindings.size() < outVars.size()){
+	logger.error(String.format("Resulted in too few bindings: %s -> %s", outVars, fullbindings));
+}
 				Context r = new Context();
 				r.put(ContextKey.BINDINGS_KEY.toString(),fullbindings);
 				ret.add(r);
@@ -311,6 +320,14 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 			logger.debug("Joining Left Stream");
 			for (TimeWrapped<Map<String, Node>> fullbindings : probeSteM.probe(inBinds, timestamp, droptime)) {
 				logger.debug(String.format("Joined: %s -> %s", inBinds, fullbindings));
+Set<String> outVars = new HashSet<String>();
+outVars.addAll(this.leftVarsToOutVars.values());
+outVars.addAll(this.rightVarsToOutVars.values());
+logger.error(String.format("expected ouput bindings: %s", outVars));
+logger.error(String.format("achieved ouput bindings: %s", fullbindings.getWrapped()));
+if (fullbindings.getWrapped().size() < outVars.size()){
+	logger.error(String.format("Resulted in too few bindings: %s -> %s", outVars, fullbindings.getWrapped()));
+}
 				Context r = new Context();
 				r.put(ContextKey.BINDINGS_KEY.toString(),fullbindings.getWrapped());
 				r.put(ContextKey.TIMESTAMP_KEY.toString(), fullbindings.getTimestamp());
@@ -338,11 +355,23 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 		logger.debug(String.format("Joining: %s with %s", this, bindings));
 		if(stream.equals(this.leftOverflow.getSource())){
 			Map<String, Node> leftbinds = this.getOutVarsMapping(this.leftVarsToOutVars, bindings);
-			ret = this.buildAndProbe(leftbinds, timestamp, delay, this.leftQueue, this.rightQueue);
+			try {
+				ret = this.buildAndProbe(leftbinds, timestamp, delay, this.leftQueue, this.rightQueue);
+			} catch (InvalidParameterException e){
+				throw new RuntimeException("Unsupported value on "+stream+"\n... with bindings "+leftbinds.toString(),e);
+			} catch (NullPointerException e){
+				throw new RuntimeException("Missing value on "+stream+"\n... with bindings "+leftbinds.toString(),e);
+			}
 		}
 		else if(stream.equals(this.rightOverflow.getSource())){
 			Map<String, Node> rightbinds = this.getOutVarsMapping(this.rightVarsToOutVars, bindings);
-			ret = this.buildAndProbe(rightbinds, timestamp, delay, this.rightQueue, this.leftQueue);
+			try {
+				ret = this.buildAndProbe(rightbinds, timestamp, delay, this.rightQueue, this.leftQueue);
+			} catch (InvalidParameterException e){
+				throw new RuntimeException("Unsupported value on "+stream+"\n... with bindings "+rightbinds.toString(),e);
+			} catch (NullPointerException e){
+				throw new RuntimeException("Missing value on "+stream+"\n... with bindings "+rightbinds.toString(),e);
+			}
 		}
 		
 		ret.addAll(this.outputBuffer);

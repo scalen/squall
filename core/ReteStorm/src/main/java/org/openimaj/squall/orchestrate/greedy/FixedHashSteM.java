@@ -1,5 +1,6 @@
 package org.openimaj.squall.orchestrate.greedy;
 
+import java.security.InvalidParameterException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -7,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+
 import org.openimaj.rdf.storm.utils.DeepHashArray;
 import org.openimaj.rdf.storm.utils.HashedCircularPriorityWindow;
 import org.openimaj.rdf.storm.utils.OverflowHandler;
@@ -74,29 +76,30 @@ public class FixedHashSteM implements TimestampedSteM<Map<String, Node>>{
 		int i = 0;
 		for (String key : this.sharedVariables){
 			Node node = binds.get(key);
-			if(node != null && node.isConcrete()){
+			if(node == null){
+				throw new NullPointerException("Variable bound to null: " + key + " => " + node);
+			} else if (node.isConcrete()){
 				vals.set(i++, node);
-				continue;
 			} else {
-				throw new UnsupportedOperationException("Incorrect node type for comparison: " + node);
+				throw new InvalidParameterException("Incorrect node type for comparison: " + key + " => " + node);
 			}
 		}
 		return vals;
 	}
 
 	@Override
-	public List<Map<String,Node>> probe(Map<String, Node> typed) {
+	public List<Map<String,Node>> probe(Map<String, Node> inBind) {
 		List<Map<String, Node>> ret = new ArrayList<Map<String,Node>>();
-		DeepHashArray<Node> sharedBindings = extractSharedBindings(typed);
+		DeepHashArray<Node> sharedBindings = extractSharedBindings(inBind);
 		Collection<Map<String, Node>> matchedQueue = this.window.getAll(sharedBindings, new Date().getTime());
 		if (matchedQueue != null){
 			for (Map<String, Node> sibitem : matchedQueue) {
 				Map<String,Node> newbind = new HashMap<String, Node>();
-				for (Entry<String, Node> map : typed.entrySet()) {
-					newbind.put(map.getKey(), map.getValue());
+				for (Entry<String, Node> mapping : inBind.entrySet()) {
+					newbind.put(mapping.getKey(), mapping.getValue());
 				}
-				for (Entry<String, Node> map : sibitem.entrySet()) {
-					newbind.put(map.getKey(), map.getValue());
+				for (Entry<String, Node> mapping : sibitem.entrySet()) {
+					newbind.put(mapping.getKey(), mapping.getValue());
 				}
 				ret.add(newbind);
 			}
