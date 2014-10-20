@@ -41,7 +41,20 @@ public class DeepHashArray<T> {
 	
 	@Override
 	public boolean equals(Object obj) {
-		return (obj instanceof DeepHashArray) && obj.hashCode() == this.hashCode();
+		if (obj instanceof DeepHashArray){
+			@SuppressWarnings("rawtypes")
+			Object[] otherArr = ((DeepHashArray) obj).arr;
+			if (otherArr.length != arr.length){
+				return false;
+			}
+			for (int i = 0; i < arr.length; i++){
+				if (!arr[i].equals(otherArr[i])){
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
 	}
 	
 	@Override
