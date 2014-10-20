@@ -1,6 +1,7 @@
 package org.openimaj.squall.build.storm;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -18,13 +19,16 @@ import org.openimaj.squall.orchestrate.NamedNode;
 import org.openimaj.squall.orchestrate.NamedStream;
 import org.openimaj.squall.orchestrate.OrchestratedProductionSystem;
 import org.openimaj.storm.utils.StormUtils;
+import org.openimaj.util.data.ContextKey;
 import org.openimaj.util.pair.IndependentPair;
+
 import backtype.storm.Config;
 import backtype.storm.generated.StormTopology;
 import backtype.storm.topology.BoltDeclarer;
 import backtype.storm.topology.IRichBolt;
 import backtype.storm.topology.IRichSpout;
 import backtype.storm.topology.TopologyBuilder;
+import backtype.storm.tuple.Fields;
 
 /**
  * @author Sina Samangooei (ss@ecs.soton.ac.uk)
@@ -111,7 +115,7 @@ public class StormStreamBuilder implements Builder{
 			 */
 			else if(namedNode.isFunction() || namedNode.isOperation()){
 				List<IndependentPair<NamedStream, NamedNode<?>>> parentStreams = extractParentStreams(ops,namedNode);
-				IRichBolt funcBolt = null;
+				ProcessingBolt funcBolt = null;
 				
 				if(namedNode.isFunction()){
 					if (namedNode.isInitialisable()){
@@ -140,8 +144,14 @@ public class StormStreamBuilder implements Builder{
 						dec.shuffleGrouping(parentName, streamName);
 					} else if(strm.varCount() < 1){
 						dec.allGrouping(parentName, streamName);
-					} else{							
-						dec.customGrouping(parentName, streamName, new ContextVariableGrouping(strm.variables()));
+					} else{
+						Fields fields = funcBolt.getFields();
+						int bindingsIndex = fields.fieldIndex(ContextKey.BINDINGS_KEY.toString());
+						if (bindingsIndex > -1){
+							dec.customGrouping(parentName, streamName, new ContextVariableGrouping(strm.variables(), bindingsIndex));
+						} else {
+							throw new RuntimeException("bindings not present expected in output");
+						}
 					}
 				}
 				state.put(name, namedNode);

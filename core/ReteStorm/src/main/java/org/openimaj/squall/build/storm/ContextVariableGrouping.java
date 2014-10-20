@@ -25,13 +25,16 @@ public class ContextVariableGrouping implements CustomStreamGrouping {
 	 */
 	private static final long serialVersionUID = -7032811266489361619L;
 	private String[] bindingVars;
+	private int bindingsIndex;
 	private List<Integer> tasks;
 
 	/**
 	 * @param variables
+	 * @param fields 
 	 */
-	public ContextVariableGrouping(String[] variables) {
+	public ContextVariableGrouping(String[] variables, int index) {
 		bindingVars = variables;
+		this.bindingsIndex = index;
 	}
 
 	@Override
@@ -41,9 +44,9 @@ public class ContextVariableGrouping implements CustomStreamGrouping {
 
 	@Override
 	public List<Integer> chooseTasks(int taskId, List<Object> values) {
-		Context ctx = (Context) values.get(0);// get the Context instance
 		List<Node> nodes = new ArrayList<Node>();
-		Map<String,Node> bindings = ctx.getTyped(ContextKey.BINDINGS_KEY.toString());
+		@SuppressWarnings("unchecked")
+		Map<String,Node> bindings = (Map<String,Node>)values.get(this.bindingsIndex);
 		for (String bind : this.bindingVars) {
 			nodes.add(bindings.get(bind));
 		}
