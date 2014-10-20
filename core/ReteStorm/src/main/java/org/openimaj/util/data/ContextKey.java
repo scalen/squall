@@ -59,4 +59,16 @@ public enum ContextKey {
 		return this.key;
 	}
 	
+	/**
+	 * @return an array of the string representations of the keys
+	 */
+	public static String[] toStrings(){
+		ContextKey[] keys = ContextKey.values();
+		String[] strings = new String[keys.length];
+		for (int i = 0; i < keys.length; i ++){
+			strings[i] = keys[i].toString();
+		}
+		return strings;
+	}
+	
 }
