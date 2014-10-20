@@ -46,7 +46,7 @@ public class RuleWrappedFunction<T extends IFunction<Context, Context>> extends
 		}
 		
 		protected String stringifyNode(Node node){
-			return node.isVariable() ? "?"+node.getName() : node.toString();
+			return node.isVariable() ? node.getName() : node.toString();
 		}
 		
 		protected String mapNode(Map<String,String> varmap, Node node){

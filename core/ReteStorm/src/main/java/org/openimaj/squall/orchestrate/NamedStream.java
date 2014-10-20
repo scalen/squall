@@ -42,10 +42,10 @@ public class NamedStream extends DirectedEdge<NamedNode<?>> {
 		StringBuilder i = new StringBuilder(name).append("[");
 		if (streamVars.length > 0){
 			int v = 0;
-			i.append("?").append(streamVars[v]);
+			i.append(streamVars[v]);
 			this.addVariable(streamVars[v]);
 			for (v++; v < streamVars.length - 1; v++){
-				i.append(",").append("?").append(streamVars[v]);
+				i.append(",").append(streamVars[v]);
 				this.addVariable(streamVars[v]);
 			}
 		}
