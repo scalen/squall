@@ -2,16 +2,19 @@ package org.openimaj.squall.functions.predicates;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
 import org.openimaj.squall.functions.calculators.BaseValueFunction;
 import org.openimaj.squall.functions.calculators.BaseValueFunction.RuleWrappedValueFunction;
+import org.openimaj.squall.functions.predicates.BasePredicateFunction.RIFPredicateException;
 import org.openimaj.util.data.Context;
 import org.openimaj.util.data.ContextKey;
 
 import com.hp.hpl.jena.graph.Node;
+import com.hp.hpl.jena.graph.NodeFactory;
 import com.hp.hpl.jena.graph.Node_Concrete;
 
 /**
@@ -37,6 +40,16 @@ public class LiteralNotEqualFunction extends BasePredicateFunction {
 														Map<Node, RuleWrappedValueFunction<?>> funcMap
 													) throws RIFPredicateException{
 		return new RuleWrappedLiteralNotEqualFunction(ns, funcMap);
+	}
+	
+	// required for kryo deserialisation by reflection
+	private LiteralNotEqualFunction() throws RIFPredicateException {
+		super(new Node[]{
+				NodeFactory.createLiteral("foo"),
+				NodeFactory.createVariable("bar")
+				},
+				new HashMap<Node, BaseValueFunction>()
+		);
 	}
 	
 	/**

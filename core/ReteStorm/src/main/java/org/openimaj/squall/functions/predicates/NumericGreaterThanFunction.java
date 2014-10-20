@@ -8,6 +8,7 @@ import java.util.Map;
 import org.apache.log4j.Logger;
 import org.openimaj.squall.functions.calculators.BaseValueFunction;
 import org.openimaj.squall.functions.calculators.BaseValueFunction.RuleWrappedValueFunction;
+import org.openimaj.squall.functions.predicates.BasePredicateFunction.RIFPredicateException;
 import org.openimaj.util.data.Context;
 import org.openimaj.util.data.ContextKey;
 
@@ -40,7 +41,7 @@ public class NumericGreaterThanFunction extends NumericPredicateFunction {
 														) throws RIFPredicateException {
 		return new RuleWrappedNumericGreaterThanFunction(ns, funcMap);
 	}
-
+	
 	/**
 	 * @param ns
 	 * @throws RIFPredicateException
@@ -49,8 +50,8 @@ public class NumericGreaterThanFunction extends NumericPredicateFunction {
 		super(ns, funcMap);
 	}
 	
-	@SuppressWarnings("javadoc") // required for kryo deserialisation by reflection
-	public NumericGreaterThanFunction() throws RIFPredicateException {
+	// required for kryo deserialisation by reflection
+	private NumericGreaterThanFunction() throws RIFPredicateException {
 		super(new Node[]{
 				NodeFactory.createLiteral("foo"),
 				NodeFactory.createVariable("bar")
