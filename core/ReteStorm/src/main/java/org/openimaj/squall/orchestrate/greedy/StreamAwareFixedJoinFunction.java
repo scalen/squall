@@ -274,7 +274,7 @@ public class StreamAwareFixedJoinFunction implements SIFunction<Context, Context
 	
 	private Map<String, Node> getOutVarsMapping(Map<String,String> inToOutMapping, Map<String, Node> inBinds){
 		Map<String, Node> leftbinds = new HashMap<String, Node>();
-		for (String var : inBinds.keySet()){
+		for (String var : inToOutMapping.keySet()){
 			leftbinds.put(inToOutMapping.get(var), inBinds.get(var));
 		}
 		return leftbinds;
@@ -343,18 +343,12 @@ if (fullbindings.getWrapped().size() < outVars.size()){
 		String stream = in.getTyped(ContextKey.STREAM_KEY.toString());
 		Long timestamp = in.getTyped(ContextKey.TIMESTAMP_KEY.toString());
 		Long delay = in.getTyped(ContextKey.DROPTIME_KEY.toString());
-		logger.debug(String.format("JOIN: Received input from %s, checking against %s and %s",
-										stream,
-										this.leftOverflow.getSource(),
-										this.rightOverflow.getSource()
-								)
-					);
 		List<Context> ret = new ArrayList<Context>();
 		
 		Map<String, Node> bindings = in.getTyped(ContextKey.BINDINGS_KEY.toString());
-		logger.debug(String.format("Joining: %s with %s", this, bindings));
 		if(stream.equals(this.leftOverflow.getSource())){
 			Map<String, Node> leftbinds = this.getOutVarsMapping(this.leftVarsToOutVars, bindings);
+			logger.debug(String.format("Joining: %s with %s, was %s from %s", this, leftbinds, bindings, stream));
 			try {
 				ret = this.buildAndProbe(leftbinds, timestamp, delay, this.leftQueue, this.rightQueue);
 			} catch (InvalidParameterException e){
@@ -365,6 +359,7 @@ if (fullbindings.getWrapped().size() < outVars.size()){
 		}
 		else if(stream.equals(this.rightOverflow.getSource())){
 			Map<String, Node> rightbinds = this.getOutVarsMapping(this.rightVarsToOutVars, bindings);
+			logger.debug(String.format("Joining: %s with %s, was %s from %s", this, rightbinds, bindings, stream));
 			try {
 				ret = this.buildAndProbe(rightbinds, timestamp, delay, this.rightQueue, this.leftQueue);
 			} catch (InvalidParameterException e){
