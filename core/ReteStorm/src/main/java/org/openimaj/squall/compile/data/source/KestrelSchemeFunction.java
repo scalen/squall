@@ -7,20 +7,17 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ThreadPoolExecutor;
 
 import org.apache.jena.riot.Lang;
 import org.apache.jena.riot.RDFDataMgr;
 import org.apache.jena.riot.RDFLanguages;
 import org.apache.log4j.Logger;
 import org.apache.thrift7.TException;
-import org.openimaj.kestrel.KestrelServerSpec;
 import org.openimaj.squall.data.ISource;
 import org.openimaj.squall.utils.JenaUtils;
 import org.openimaj.storm.utils.KestrelParsedURI;
@@ -29,13 +26,12 @@ import org.openimaj.util.data.Context;
 import org.openimaj.util.data.ContextKey;
 import org.openimaj.util.function.Function;
 import org.openimaj.util.function.MultiFunction;
-import org.openimaj.util.pair.IndependentPair;
-import org.openimaj.util.parallel.GlobalExecutorPool;
 import org.openimaj.util.stream.KestrelStream;
 import org.openimaj.util.stream.KestrelWriter;
 import org.openimaj.util.stream.Stream;
 
 import com.hp.hpl.jena.graph.Graph;
+import com.hp.hpl.jena.graph.Node;
 import com.hp.hpl.jena.graph.Triple;
 import com.hp.hpl.jena.sparql.graph.GraphFactory;
 
@@ -57,6 +53,11 @@ public class KestrelSchemeFunction implements Function<URI, Stream<Context>> {
 				Collection<Triple> triples = JenaUtils.readNTriples(new ByteArrayInputStream(in));
 				List<Context> ret = new ArrayList<Context>();
 				for (Triple triple : triples) {
+//					Map<String, Node> bindings = new HashMap<String,Node>();
+//					bindings.put("s", triple.getSubject());
+//					bindings.put("p", triple.getPredicate());
+//					bindings.put("o", triple.getObject());
+//					ret.add(new Context(ContextKey.BINDINGS_KEY.toString(),bindings));
 					ret.add(new Context(ContextKey.TRIPLE_KEY.toString(),triple));
 				}
 				

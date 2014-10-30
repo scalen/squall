@@ -79,7 +79,6 @@ public class FunctorConsequence extends AtomConsequence {
 				toret.add(t);
 			}
 		};
-		this.getClause().evalAsBodyClause(context);
 		
 		try{
 			if (imp != null) {
@@ -91,9 +90,11 @@ public class FunctorConsequence extends AtomConsequence {
 			
 		}
 		List<Context> ctxs = new ArrayList<Context>();
-		Context out = new Context();
-		out.put(ContextKey.TRIPLE_KEY.toString(), toret);
-		ctxs.add(out);
+		for (Triple t : toret){
+			Context out = new Context();
+			out.put(ContextKey.TRIPLE_KEY.toString(), t);
+			ctxs.add(out);
+		}
 		return ctxs;
 	}
 	private FunctorConsequence(){

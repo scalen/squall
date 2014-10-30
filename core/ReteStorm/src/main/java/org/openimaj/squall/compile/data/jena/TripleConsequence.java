@@ -16,10 +16,15 @@ import com.hp.hpl.jena.reasoner.rulesys.Rule;
 import com.hp.hpl.jena.reasoner.rulesys.impl.BindingVector;
 
 /**
- * @author Sina Samangooei (ss@ecs.soton.ac.uk)
+ * @author Sina Samangooei (ss@ecs.soton.ac.uk) &amp; David Monks (dm11g08@ecs.soton.ac.uk)
  *
  */
 public class TripleConsequence extends AbstractTripleFunction implements IConsequence {
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1150438990105797219L;
 
 	/**
 	 * @param r 
@@ -44,9 +49,14 @@ public class TripleConsequence extends AbstractTripleFunction implements IConseq
 		}
 		
 		List<Context> ctxs = new ArrayList<Context>();
-		for (Triple context : ret) {
+		for (Triple triple : ret) {
 			Context out = new Context();
-			out.put(ContextKey.TRIPLE_KEY.toString(), context);			
+//			Map<String, Node> bindings = new HashMap<String,Node>();
+//			bindings.put("s", triple.getSubject());
+//			bindings.put("p", triple.getPredicate());
+//			bindings.put("o", triple.getObject());
+//			out.put(ContextKey.BINDINGS_KEY.toString(),bindings);
+			out.put(ContextKey.TRIPLE_KEY.toString(), triple);			
 			ctxs.add(out);
 		}
 		return ctxs;

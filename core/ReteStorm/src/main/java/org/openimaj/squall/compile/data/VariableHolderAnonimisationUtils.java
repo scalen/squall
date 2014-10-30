@@ -86,7 +86,6 @@ public class VariableHolderAnonimisationUtils {
 	}
 	
 	/**
-	 * @param fieldsTemplate
 	 * @param arvh
 	 * 		Variable holder to be populated with base variables and a rule-to-base variable mapping. 
 	 */
