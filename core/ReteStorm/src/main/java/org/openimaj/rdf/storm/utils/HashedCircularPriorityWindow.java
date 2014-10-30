@@ -317,10 +317,12 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 		
 		@Override
 		public TimedMapEntry<K, V> poll() {
-			TimedMapEntry<K,V> last = this.queue.remove();
-			if (last != null && HashedCircularPriorityWindow.this.removeFromMap(last.getKey(), last.getValue(), last.getDropTime()) != null){
-				return last;
-			}
+			try {
+				TimedMapEntry<K,V> last = this.queue.remove();
+				if (HashedCircularPriorityWindow.this.removeFromMap(last.getKey(), last.getValue(), last.getDropTime()) != null){
+					return last;
+				}
+			} catch (NoSuchElementException e){}
 			return null;
 		}
 		
@@ -444,7 +446,9 @@ public class HashedCircularPriorityWindow<K, V> implements TimedMultiMap<K,V>, S
 		public void pruneToDuration(long timestamp) {
 			TimeWrapped.incrementNow(timestamp);
 			while (this.nextItemIsOld()){
-				this.overflowDuration(this.remove().getValue());
+				try{
+					this.overflowDuration(this.remove().getValue());
+				} catch (NoSuchElementException e){}
 			}
 		}
 		
