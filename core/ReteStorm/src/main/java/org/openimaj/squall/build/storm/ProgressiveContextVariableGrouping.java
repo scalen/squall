@@ -235,18 +235,18 @@ public class ProgressiveContextVariableGrouping implements CustomStreamGrouping 
 
 	@Override
 	public List<Integer> chooseTasks(int taskId, List<Object> values) {
-		long tasks = Long.MIN_VALUE;
+		long tasks = 0xffff_ffff_ffff_ffffL;
 		@SuppressWarnings("unchecked")
 		Map<String,Node> bindings = (Map<String,Node>)values.get(this.bindingsIndex);
 		for (String bind : this.vars) {
 			Object val = bindings.get(bind);
-			if (val != null){
-				tasks = tasks
-						& (this.bitMapByVar.get(bind)
+			int groups = this.groupsCountByVar.get(bind);
+			if (val != null && groups > 1){
+				long mask = this.bitMapByVar.get(bind)
 							<< (this.tasksCountByVar.get(bind)
-								*(val.hashCode() % this.groupsCountByVar.get(bind))
-							)
-						);
+								*(val.hashCode() % groups)
+							);
+				tasks = tasks & mask;
 			}
 		}
 		
