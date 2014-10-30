@@ -44,11 +44,13 @@ import org.openimaj.squall.functions.calculators.BaseValueFunction.RuleWrappedVa
 import org.openimaj.squall.functions.consequences.AtomConsequence;
 import org.openimaj.squall.functions.consequences.TripleConsequence;
 import org.openimaj.squall.functions.filters.AtomFilterFunction;
+import org.openimaj.squall.functions.filters.BindingsComparingFilterFunction;
 import org.openimaj.squall.functions.filters.TripleFilterFunction;
 import org.openimaj.squall.functions.predicates.BasePredicateFunction.RIFPredicateException;
 import org.openimaj.squall.util.MD5Utils;
 import org.openimaj.util.data.Context;
 import org.openimaj.util.stream.Stream;
+
 import com.hp.hpl.jena.graph.Node;
 import com.hp.hpl.jena.graph.NodeFactory;
 import com.hp.hpl.jena.graph.Node_Variable;
@@ -147,9 +149,9 @@ public class RIFCoreRuleCompiler implements Compiler<RIFRuleSet> {
 			List<ClauseEntry> triples = translate((RIFAtomic) formula, ccps);
 			for (ClauseEntry tp : triples){
 				if (tp instanceof TriplePattern)
-					ccps.addJoinComponent(TripleFilterFunction.ruleWrapped((TriplePattern) tp));
+					ccps.addJoinComponent(new BindingsComparingFilterFunction.TripleFilteringDecomposedJoinComponent((TriplePattern) tp));
 				else if (tp instanceof Functor)
-					ccps.addJoinComponent(AtomFilterFunction.ruleWrapped((Functor) tp));
+					ccps.addJoinComponent(new BindingsComparingFilterFunction.AtomFilteringDecomposedJoinComponent((Functor) tp));
 			}
 		} else if (formula instanceof RIFAnd){
 			for (RIFFormula f : (RIFAnd) formula){
