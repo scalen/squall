@@ -33,8 +33,9 @@ public class OPSDisplayUtils {
 	/**
 	 * Render the OPS as a {@link mxGraph}
 	 * @param ops
+	 * @return 
 	 */
-	public static void display(OrchestratedProductionSystem ops){
+	public static JFrame display(OrchestratedProductionSystem ops){
 		// Fix "Comparison method violates its general contract!"
      	System.setProperty("java.util.Arrays.useLegacyMergeSort", "true");
 		
@@ -100,6 +101,7 @@ public class OPSDisplayUtils {
 		frame.getContentPane().add(outputArea, BorderLayout.SOUTH);
 		frame.pack();
 		frame.setVisible(true);
+		return frame;
 	}
 
 	private static mxGraphLayout organicLayout(mxGraph mxgraph) {
