@@ -98,6 +98,13 @@ public class TripleFilterFunction extends BaseFilterFunction {
 			this.wrap(new TripleFilterFunction(((TripleFiltARVH) super.getVariableHolder()).clause));
 		}
 		
+		/**
+		 * @return the original TriplePattern on which this triple filter filters
+		 */
+		public TriplePattern getClause(){
+			return ((TripleFiltARVH) super.getVariableHolder()).clause;
+		}
+		
 		protected static class TripleFiltARVH extends ARVHComponent {
 			
 			private final TriplePattern clause;

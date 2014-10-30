@@ -86,15 +86,21 @@ public class AtomFilterFunction extends BaseFilterFunction {
 	}
 	
 	/**
-	 * @author David Monks <dm11g08@ecs.soton.ac.uk>
+	 * @author David Monks (dm11g08@ecs.soton.ac.uk)
 	 *
-	 * @param <T>
 	 */
 	public static class RuleWrappedAtomFilter extends RuleWrappedFunction<AtomFilterFunction> {
 		
 		protected RuleWrappedAtomFilter(Functor clause){
 			super(new AtomFiltARVH(clause));
 			this.wrap(new AtomFilterFunction(((AtomFiltARVH) super.getVariableHolder()).clause));
+		}
+		
+		/**
+		 * @return the original Functor on which this atom filter filters
+		 */
+		public Functor getClause(){
+			return ((AtomFiltARVH) this.getVariableHolder()).clause;
 		}
 		
 		protected static class AtomFiltARVH extends ARVHComponent {
