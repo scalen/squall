@@ -1,5 +1,6 @@
 package org.openimaj.squall.orchestrate.tplo;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -88,11 +89,11 @@ public class TPLOOrchestrator extends GreedyOrchestrator{
 		
 		return joined;
 	}
-
+	
 	@Override
 	protected RuleWrapped<? extends NamedNode<? extends IFunction<Context,Context>>> createFilterNode(
 			OrchestratedProductionSystem root,
-			RuleWrapped<? extends IFunction<Context,Context>> filterFunc) {
+			RuleWrapped<? extends IFunction<Context,Context>> filterFunc){
 		// If the function already exists in the set of created functions, return the existing NGNIVFunction.
 		if (funcMap.containsKey(filterFunc.identifier())) {
 			return new RuleWrapped<NNIFunction>(filterFunc.getVariableHolder(),funcMap.get(filterFunc.identifier()));
@@ -107,11 +108,7 @@ public class TPLOOrchestrator extends GreedyOrchestrator{
 														)
 												);
 		funcMap.put(currentNode.identifier(), currentNode.getWrapped());
-		for (NamedSourceNode input : root.root) {
-			NamedStream str = new NamedStream(input.getName());
-			input.connectOutgoingEdge(str);
-			currentNode.getWrapped().connectIncomingEdge(str);
-		}
+		
 		return currentNode;
 	}
 

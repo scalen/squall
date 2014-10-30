@@ -1,6 +1,7 @@
 package org.openimaj.squall.orchestrate.greedy;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -197,7 +198,7 @@ public class GreedyOrchestrator implements Orchestrator{
 	 * @return
 	 * @throws PlanningException
 	 */
-	private CPSResult orchestrate(OrchestratedProductionSystem root,CompiledProductionSystem sys) throws PlanningException {
+	protected CPSResult orchestrate(OrchestratedProductionSystem root,CompiledProductionSystem sys) throws PlanningException {
 		// Create the list of paired predicates and joined filters, i.e. processing options
 		PartialCPSResult joinedCPSs = new PartialCPSResult();
 		// Create the list of fully processed rules resulting from this point.
@@ -394,7 +395,7 @@ public class GreedyOrchestrator implements Orchestrator{
 		return String.format("PREDICATE_%d",predicate ++ );
 	}
 	
-	private RuleWrapped<? extends NamedNode<? extends IFunction<Context, Context>>> orchestrateJoinComponents(
+	protected RuleWrapped<? extends NamedNode<? extends IFunction<Context, Context>>> orchestrateJoinComponents(
 			OrchestratedProductionSystem root, 
 			List<JoinComponent<?>> list
 	) {
@@ -402,9 +403,19 @@ public class GreedyOrchestrator implements Orchestrator{
 		RuleWrapped<? extends NamedNode<? extends IFunction<Context, Context>>> ret = null;
 		for (JoinComponent<?> jc : list) {
 			RuleWrapped<? extends NamedNode<? extends IFunction<Context,Context>>> next;
-			if(jc.isFunction()){				
+			if (jc.isManyFunctions()){
+				@SuppressWarnings("unchecked")
+				List<RuleWrapped<? extends IFunction<Context, Context>>> chain =
+						(List<RuleWrapped<? extends IFunction<Context, Context>>>) jc.getComponents(true);
+				next = createFilterNodeAndConnectToSources(root, chain.get(0));
+				for (int i = 1; i < chain.size(); i++){
+					NamedNode<? extends IFunction<Context,Context>> prevAnonNode = next.getWrapped();
+					next = createFilterNode(root, chain.get(i));
+					connect(prevAnonNode, next.getWrapped());
+				}
+			} else if(jc.isFunction()){				
 				RuleWrapped<? extends IFunction<Context, Context>> typedComponent = jc.getTypedComponent();
-				next = createFilterNode(root, typedComponent);
+				next = createFilterNodeAndConnectToSources(root, typedComponent);
 			} else if (jc.isCPS()){
 				CompiledProductionSystem cps = jc.getTypedComponent();
 				try {
@@ -469,6 +480,14 @@ public class GreedyOrchestrator implements Orchestrator{
 	protected String nextJoinName() {
 		return String.format("JOIN_%d",join ++ );
 	}
+	
+	protected RuleWrapped<? extends NamedNode<? extends IFunction<Context,Context>>> createFilterNodeAndConnectToSources(
+			OrchestratedProductionSystem root,
+			RuleWrapped<? extends IFunction<Context,Context>> filterFunc) {
+		RuleWrapped<? extends NamedNode<? extends IFunction<Context,Context>>> filterNode = createFilterNode(root, filterFunc);
+		connectToAll(root.root, filterNode.getWrapped());
+		return filterNode;
+	}
 
 	protected RuleWrapped<? extends NamedNode<? extends IFunction<Context,Context>>> createFilterNode(
 			OrchestratedProductionSystem root,
@@ -482,12 +501,23 @@ public class GreedyOrchestrator implements Orchestrator{
 								filterFunc.getWrapped()
 						)
 				);
-		for (NamedSourceNode input : root.root) {
-			NamedStream str = new NamedStream(input.getName());
-			input.connectOutgoingEdge(str);
-			currentNode.getWrapped().connectIncomingEdge(str);
-		}
 		return currentNode;
+	}
+	
+	protected void connectToAll(
+			Collection<? extends NamedNode<?>> inputs,
+			NamedNode<? extends IFunction<Context, Context>> node){
+		for (NamedNode<?> input : inputs) {
+			connect(input, node);
+		}
+	}
+	
+	protected void connect(
+			NamedNode<?> input,
+			NamedNode<? extends IFunction<Context, Context>> node){
+		NamedStream str = new NamedStream(input.getName());
+		input.connectOutgoingEdge(str);
+		node.connectIncomingEdge(str);
 	}
 
 	protected String nextFilterName() {
