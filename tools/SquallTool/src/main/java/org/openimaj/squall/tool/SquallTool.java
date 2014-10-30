@@ -2,8 +2,11 @@ package org.openimaj.squall.tool;
 
 import java.io.IOException;
 
+import javax.swing.JFrame;
+
 import org.openimaj.squall.compile.CompiledProductionSystem;
 import org.openimaj.squall.orchestrate.OrchestratedProductionSystem;
+import org.openimaj.squall.utils.OPSDisplayUtils;
 
 /**
  * @author Sina Samangooei (ss@ecs.soton.ac.uk)
@@ -33,6 +36,9 @@ public class SquallTool {
 			this.opts.setup();
 			CompiledProductionSystem cps = opts.tmOp.cps();
 			OrchestratedProductionSystem ops = opts.pmOp.ops(cps);
+			if (opts.visualise){
+				JFrame frame = OPSDisplayUtils.display(ops);
+			}
 			opts.bmOp.run(ops);
 		} finally {
 			this.opts.shutdown();
