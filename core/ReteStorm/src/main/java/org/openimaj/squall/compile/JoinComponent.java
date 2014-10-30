@@ -1,5 +1,7 @@
 package org.openimaj.squall.compile;
 
+import java.util.List;
+
 import org.openimaj.squall.compile.data.IFunction;
 import org.openimaj.squall.compile.data.RuleWrappedFunction;
 import org.openimaj.util.data.Context;
@@ -16,6 +18,10 @@ public abstract class JoinComponent<T>{
 	 */
 	public abstract boolean isFunction();
 	/**
+	 * @return does this component implement a 
+	 */
+	public abstract boolean isManyFunctions();
+	/**
 	 * @return is this component a {@link CompiledProductionSystem}
 	 */
 	public abstract boolean isCPS();
@@ -24,6 +30,12 @@ public abstract class JoinComponent<T>{
 	 * @return returns the T
 	 */
 	public abstract T getComponent();
+	
+	/**
+	 * @param chained 
+	 * @return returns the T
+	 */
+	public abstract T getComponents(boolean chained);
 	
 	/**
 	 * @author Sina Samangooei (ss@ecs.soton.ac.uk)
@@ -44,6 +56,11 @@ public abstract class JoinComponent<T>{
 		public boolean isFunction() {
 			return false;
 		}
+		
+		@Override
+		public boolean isManyFunctions() {
+			return false;
+		}
 
 		@Override
 		public boolean isCPS() {
@@ -53,6 +70,11 @@ public abstract class JoinComponent<T>{
 		@Override
 		public CompiledProductionSystem getComponent() {
 			return cps;
+		}
+
+		@Override
+		public CompiledProductionSystem getComponents(boolean chained) {
+			throw new UnsupportedOperationException("Component cannot be decomposed, use getComponent().");
 		}
 		
 	}
@@ -76,6 +98,11 @@ public abstract class JoinComponent<T>{
 		public boolean isFunction() {
 			return true;
 		}
+		
+		@Override
+		public boolean isManyFunctions() {
+			return false;
+		}
 
 		@Override
 		public boolean isCPS() {
@@ -87,7 +114,39 @@ public abstract class JoinComponent<T>{
 			return this.cps;
 		}
 
+		@Override
+		public RuleWrappedFunction<? extends IFunction<Context, Context>> getComponents(
+				boolean chained) {
+			throw new UnsupportedOperationException("Component cannot be decomposed, use getComponent().");
+		}
 		
+	}
+	
+	/**
+	 * @author David Monks (dm11g08@ecs.soton.ac.uk)
+	 *
+	 */
+	public static abstract class DecomposedFunctionJoinComponent extends JoinComponent<List<RuleWrappedFunction<? extends IFunction<Context,Context>>>> {
+
+		@Override
+		public boolean isFunction() {
+			return false;
+		}
+		
+		@Override
+		public boolean isManyFunctions() {
+			return true;
+		}
+
+		@Override
+		public boolean isCPS() {
+			return false;
+		}
+
+		@Override
+		public List<RuleWrappedFunction<? extends IFunction<Context, Context>>> getComponent() {
+			throw new UnsupportedOperationException("Component is decomposed, used getComponents(chained).");
+		}
 		
 	}
 
