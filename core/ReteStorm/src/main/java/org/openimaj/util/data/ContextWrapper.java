@@ -1,8 +1,12 @@
 package org.openimaj.util.data;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.openimaj.util.data.Context;
 import org.openimaj.util.function.Function;
 
+import com.hp.hpl.jena.graph.Node;
 import com.hp.hpl.jena.graph.Triple;
 
 /**
@@ -24,6 +28,11 @@ public class ContextWrapper implements Function<Triple,Context>{
 	@Override
 	public Context apply(Triple in) {
 		Context ret = new Context();
+//		Map<String, Node> bindings = new HashMap<String,Node>();
+//		bindings.put("s", in.getSubject());
+//		bindings.put("p", in.getPredicate());
+//		bindings.put("o", in.getObject());
+//		ret.put(key,bindings);
 		ret.put(key, in);
 		return ret;
 	}
