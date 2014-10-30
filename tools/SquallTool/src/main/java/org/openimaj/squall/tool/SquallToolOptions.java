@@ -24,6 +24,16 @@ import org.openimaj.squall.tool.modes.translator.builder.BuilderModeOption;
 public class SquallToolOptions {
 	
 	/**
+	 * To visualise or not to visualise?
+	 */
+	@Option(
+			name = "--visualise",
+			aliases = "-v",
+			required = false,
+			usage = "Specify to show visualisation of the processing plan")
+	public boolean visualise = false;
+	
+	/**
 	 * The translator
 	 */
 	@Option(
