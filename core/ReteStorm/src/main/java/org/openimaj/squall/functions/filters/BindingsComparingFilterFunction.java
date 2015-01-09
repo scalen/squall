@@ -382,24 +382,29 @@ public abstract class BindingsComparingFilterFunction extends BaseFilterFunction
 	public List<Context> apply(Context inc) {
 		List<Context> ctxs = new ArrayList<Context>();
 		Map<String,Node> binds = inc.getTyped(ContextKey.BINDINGS_KEY.toString());
-		if (binds == null){
+		
+		boolean match = false;
+		try {
+			match = this.matchBinds(binds);
+		} catch (NullPointerException e){
 			binds = new HashMap<String, Node>();
 			Triple t = inc.getTyped(ContextKey.TRIPLE_KEY.toString());
-			if (t == null){
+			try {
+				binds.put(SUBJECT, t.getSubject());
+				binds.put(PREDICATE, t.getPredicate());
+				binds.put(OBJECT, t.getObject());
+			} catch (NullPointerException ex){
 				Functor f = inc.getTyped(ContextKey.ATOM_KEY.toString());
 				for (int i = 0; i < f.getArgLength(); i++){
 					binds.put(Integer.toString(i), f.getArgs()[i]);
 				}
-			} else {
-				binds.put(SUBJECT, t.getSubject());
-				binds.put(PREDICATE, t.getPredicate());
-				binds.put(OBJECT, t.getObject());
 			}
+			match = this.matchBinds(binds);
 		}
 		
 		logger.debug(String.format("Checking at Filter(%s == %s): %s", this.first, this.second, inc));
 		
-		if (this.matchBinds(binds)){
+		if (match){
 			logger.debug(String.format("Match at Filter(%s == %s): %s", this.first, this.second, inc));
 			// We have a match!
 			Context out = new Context();
