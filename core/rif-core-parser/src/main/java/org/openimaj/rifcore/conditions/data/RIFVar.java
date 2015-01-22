@@ -19,10 +19,11 @@ public class RIFVar extends RIFDatum {
 	
 	/**
 	 * @param name
-	 * @param index
+	 * @return 
 	 */
-	public void setName(String name){
+	public RIFVar setName(String name){
 		this.node = (Node_Variable) NodeFactory.createVariable(name);
+		return this;
 	}
 	
 	/**
