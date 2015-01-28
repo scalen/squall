@@ -24,7 +24,7 @@ public abstract class RIFConst <T> extends RIFDatum {
 	/**
 	 * @param data
 	 */
-	public abstract void setData(T data);
+	public abstract RIFDatum setData(T data);
 	
 	/**
 	 * @return

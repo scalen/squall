@@ -5,6 +5,7 @@ import java.net.URISyntaxException;
 
 import com.hp.hpl.jena.datatypes.xsd.XSDDatatype;
 import com.hp.hpl.jena.graph.Node;
+import com.hp.hpl.jena.graph.NodeFactory;
 import com.hp.hpl.jena.graph.Node_Concrete;
 
 /**
@@ -39,8 +40,9 @@ public class RIFStringConst extends RIFXSDTypedConst {
 	}
 
 	@Override
-	public void setData(String data) {
-		this.node = (Node_Concrete) Node.createLiteral(data, RIFStringConst.dtype);
+	public RIFStringConst setData(String data) {
+		this.node = (Node_Concrete) NodeFactory.createLiteral(data, RIFStringConst.dtype);
+		return this;
 	}
 
 }

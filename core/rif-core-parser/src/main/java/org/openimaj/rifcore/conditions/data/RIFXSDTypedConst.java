@@ -30,9 +30,10 @@ public class RIFXSDTypedConst extends RIFConst<String> {
 	}
 
 	@Override
-	public void setData(String data) {
+	public RIFXSDTypedConst setData(String data) {
 		String format = "\"%s\"^^%s";
 		this.node = (Node_Concrete) Node.createLiteral(data,new XSDDatatype(this.dtype.getFragment()));
+		return this;
 	}
 
 }

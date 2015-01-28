@@ -12,8 +12,9 @@ import com.hp.hpl.jena.graph.Node_Concrete;
 public abstract class RIFURIConst extends RIFConst<URI> {
 
 	@Override
-	public void setData(URI data) {
+	public RIFURIConst setData(URI data) {
 		this.node = (Node_Concrete) NodeFactory.createURI(data.toString());
+		return this;
 	}
 	
 }
