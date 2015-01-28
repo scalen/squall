@@ -17,9 +17,15 @@ import org.apache.log4j.Logger;
 import org.openimaj.rifcore.RIFRuleSet;
 import org.openimaj.rifcore.conditions.atomic.RIFError;
 import org.openimaj.rifcore.conditions.atomic.RIFFrame;
+import org.openimaj.rifcore.conditions.data.RIFConst;
 import org.openimaj.rifcore.conditions.data.RIFDatum;
 import org.openimaj.rifcore.conditions.data.RIFIRIConst;
+import org.openimaj.rifcore.conditions.data.RIFLocalConst;
+import org.openimaj.rifcore.conditions.data.RIFLocaleStringConst;
+import org.openimaj.rifcore.conditions.data.RIFStringConst;
+import org.openimaj.rifcore.conditions.data.RIFURIConst;
 import org.openimaj.rifcore.conditions.data.RIFVar;
+import org.openimaj.rifcore.conditions.data.RIFXSDTypedConst;
 import org.openimaj.rifcore.conditions.formula.RIFAnd;
 import org.openimaj.rifcore.conditions.formula.RIFAnon;
 import org.openimaj.rifcore.conditions.formula.RIFExists;
@@ -101,7 +107,23 @@ abstract class OWLTranslater <IO> {
 		}
 	}
 	
-	protected Collection<Element> getChildElementsByTagNameNS(Element parent, String namespace, String tag){
+	protected RIFFrame constructOWLSameAs(RIFDatum subject, RIFDatum object){
+		try {
+			RIFIRIConst sameAs = new RIFIRIConst().setData(new URI(OWL_PREFIX + "sameAs"));
+			
+			RIFFrame frame = new RIFFrame();
+			
+			frame.setSubject(subject);
+			frame.setPredicate(sameAs);
+			frame.setObject(object);
+			
+			return frame;
+		} catch (URISyntaxException e) {
+			throw new RuntimeException("SHOULD NEVER HAPPEN (owl:sameAs is a fixed, valid URI)", e);
+		}
+	}
+	
+ 	protected Collection<Element> getChildElementsByTagNameNS(Element parent, String namespace, String tag){
 		Collection<Element> result = new HashSet<Element>();
 		
 		NodeList children = parent.getChildNodes();
@@ -155,6 +177,8 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 		rules = compileClassDescriptions(rules);
 		
 		rules = compilePropertyDescriptions(rules);
+		
+		rules = compileIndividualDescriptions(rules);
 		
 		ruleSet.addRootGroup(rules);
 		
@@ -218,35 +242,54 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 		return ruleSet;
 	}
 	
+	private RIFGroup compileIndividualDescriptions(RIFGroup ruleSet) {
+		// TODO
+		
+		return ruleSet;
+	}
+	
 }
 
 class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 
+	private static final Logger logger = Logger.getLogger(OWLClassCompiler.class);
+	
 	protected final Element clazz;
 	protected final RIFVar instance;
-	protected RIFFormula subClassDescription = null;
-	protected RIFFormula superClassDescription = null;
+	protected RIFMember classMembership;
+	protected RIFOr subClassDescriptions = new RIFOr();
+	protected RIFAnd superClassDescriptions = new RIFAnd();
 	
 	public OWLClassCompiler(Element clazz, RIFVar instance){
 		this.clazz = clazz;
 		this.instance = instance;
+		
+		// get class URI
+		String className = clazz.getAttributeNS(RDF_PREFIX, "about");
+		if (className.length() > 0){
+			classMembership = constructRIFMemeber(instance, className);
+		} else {
+			classMembership = null;
+		}
 	}
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
-		// get class URI
-		String className = clazz.getAttributeNS(RDF_PREFIX, "about");
-		if (className.length() > 0){
-			RIFMember classMembership = constructRIFMemeber(instance, className);
-			this.subClassDescription = classMembership;
-			this.superClassDescription = classMembership;
-		}
-				
 		return this.compileProper(rules);
 	}
 	
 	protected RIFGroup compileProper(RIFGroup rules){
-		RIFOr classDescription = new RIFOr();
+		// Equivalent Classes
+		Collection<Element> equivalentClasses = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "equivalentClass");
+		for (Element equivClass : equivalentClasses){
+			rules = compileEquivalentClass(rules, equivClass);
+		}
+		
+		// Subclasses
+		Collection<Element> superClasses = getChildElementsByTagNameNS(clazz, RDFS_PREFIX, "subClassOf");
+		for (Element superClass : superClasses){
+			rules = compileSuperClass(rules, superClass);
+		}
 		
 		Collection<Element> classIntersections = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "intersectionOf");
 		Collection<Element> classUnions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "unionOf");
@@ -262,91 +305,195 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		Collection<Element> maxQualCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "maxQualifiedCardinality");
 		
 		if (!classIntersections.isEmpty()){
-			rules = compileIntersections(rules, classIntersections, classDescription);
+			rules = compileIntersections(rules, classIntersections);
 		} else if (!classUnions.isEmpty()){
-			rules = compileUnions(rules, classUnions, classDescription);
+			rules = compileUnions(rules, classUnions);
 		} else if (!complementClasses.isEmpty()){
 			// handled along with disjoint classes
 		} else if (!existentialRestrictions.isEmpty()){
-			rules = compileExistentialRestrictions(rules, existentialRestrictions, classDescription);
-		// TODO
-//		} else if (!universalRestrictions.isEmpty()){
-//			rules = compileUniversalRestrictions(rules, universalRestrictions, classDescription);
-//		} else if (!valueRestrictions.isEmpty()){
-//			rules = compileValueRestrictions(rules, valueRestrictions, classDescription);
-//		} else if (!cardinalityRestrictions.isEmpty()){
-//			rules = compilecardinalityRestrictions(rules, cardinalityRestrictions, classDescription);
-//		} else if (!maxCardRestrictions.isEmpty()){
-//			rules = compileMaxCardRestrictions(rules, maxCardRestrictions, classDescription);
-//		} else if (!minCardRestrictions.isEmpty()){
-//			rules = compileMinCardRestrictions(rules, minCardRestrictions, classDescription);
-//		} else if (!maxQualCardRestrictions.isEmpty()){
-//			rules = compileMaxQualCardRestrictions(rules, maxQualCardRestrictions, classDescription);
+			rules = compileExistentialRestrictions(rules, existentialRestrictions);
+		} else if (!universalRestrictions.isEmpty()){
+			rules = compileUniversalRestrictions(rules, universalRestrictions);
+		} else if (!valueRestrictions.isEmpty()){
+			rules = compileValueRestrictions(rules, valueRestrictions);
+		} else if (!cardinalityRestrictions.isEmpty()){
+			rules = compileCardinalityRestrictions(rules, cardinalityRestrictions);
+		} else if (!maxCardRestrictions.isEmpty()){
+			rules = compileMaxCardRestrictions(rules, maxCardRestrictions);
+		} else if (!minCardRestrictions.isEmpty()){
+			rules = compileMinCardRestrictions(rules, minCardRestrictions);
+		} else if (!maxQualCardRestrictions.isEmpty()){
+			rules = compileMaxQualCardRestrictions(rules, maxQualCardRestrictions);
 		}
 		
 		// Disjoint Classes
 		// Not strictly accurate outside of OWL 2 RL entailments, but within that scope they are treated the same
 		complementClasses.addAll(getChildElementsByTagNameNS(clazz, OWL_PREFIX, "disjointWith"));
-		rules = compileComplements(rules, complementClasses, classDescription);
+		rules = compileComplements(rules, complementClasses);
 		
-		// TODO migrate to methods
-		// Equivalent Classes
-		Collection<Element> equivalentClasses = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "equivalentClass");
-		if (!equivalentClasses.isEmpty()){
-			for (Node c : equivalentClasses){
-				Element equivClass = (Element) c;
-				String equivClassName = equivClass.getAttributeNS(RDF_PREFIX, "resource");
-				if (equivClassName.length() > 0){
-					RIFMember equivClassMembership = constructRIFMemeber(instance, equivClassName);
-					
-					addRule(rules,
-							equivClassMembership,
-							subClassDescription == null ? classDescription : subClassDescription);
-					addRule(rules,
-							superClassDescription == null ? classDescription : superClassDescription,
-							equivClassMembership);
-				}
-				if (equivClass.hasChildNodes()){
-					Collection<Element> classes = getChildElementsByTagNameNS(equivClass, OWL_PREFIX, "Class");
-					if (!classes.isEmpty()){
-						for (Element ec : classes){
-							OWLEquivalentClassCompiler scc = new OWLEquivalentClassCompiler(
-																		ec, instance,
-																		superClassDescription == null ? classDescription : superClassDescription);
-							rules = scc.compile(rules);
-						}
-					}
-				}				
+		// After establishing the class description and the hierarchy directly above and below the class, express subsumption rules concerning the class
+		// If anonymous, all subclasses imply all superclasses
+		if (classMembership == null) for (RIFFormula body : subClassDescriptions){
+			for (RIFFormula head : superClassDescriptions){
+				addRule(rules, head, body);
 			}
-		}
-		
-		// Subclasses
-		Collection<Element> superClasses = getChildElementsByTagNameNS(clazz, RDFS_PREFIX, "subClassOf");
-		if (!superClasses.isEmpty()){
-			for (Node c : superClasses){
-				Element superClass = (Element) c;
-				String superClassName = superClass.getAttributeNS(RDF_PREFIX, "resource");
-				if (superClassName.length() > 0){
-					addRule(rules,
-							constructRIFMemeber(instance, superClassName),
-							subClassDescription == null ? classDescription : subClassDescription);
-				}
-				if (superClass.hasChildNodes()){
-					Collection<Element> classes = getChildElementsByTagNameNS(superClass, OWL_PREFIX, "Class");
-					if (!classes.isEmpty()){
-						for (Element sc : classes){
-							OWLSuperClassCompiler scc = new OWLSuperClassCompiler(
-																sc, instance,
-																subClassDescription == null ? classDescription : subClassDescription);
-							rules = scc.compile(rules);
-						}
-					}
-				}				
+		} else {
+		// If named, all subclasses imply this class, and this class implies all superclasses
+			for (RIFFormula body : subClassDescriptions){
+				addRule(rules, classMembership, body);
+			}
+			for (RIFFormula head : superClassDescriptions){
+				addRule(rules, head, classMembership);
 			}
 		}
 		
 		return rules;
 	}
+
+	// Subsumption Compilation methods
+
+	private RIFGroup compileEquivalentClass(RIFGroup rules, Element equivClass) {
+		String equivClassName = equivClass.getAttributeNS(RDF_PREFIX, "resource");
+		if (equivClassName.length() > 0){
+			RIFMember equivClassMembership = constructRIFMemeber(instance, equivClassName);
+			
+			subClassDescriptions.addFormula(equivClassMembership);
+			superClassDescriptions.addFormula(equivClassMembership);
+		} else if (equivClass.hasChildNodes()){
+			Collection<Element> classes = getChildElementsByTagNameNS(equivClass, OWL_PREFIX, "Class");
+			classes.addAll(getChildElementsByTagNameNS(equivClass, OWL_PREFIX, "Restriction"));
+			for (Element ec : classes){
+				OWLEquivalentClassCompiler scc = new OWLEquivalentClassCompiler(
+														ec, instance, subClassDescriptions, superClassDescriptions);
+				rules = scc.compile(rules);
+			}
+		} else {
+			throw new RuntimeException("owl:equivalentClass statement is missing an object, either reference or description.");
+		}
+		return rules;
+	}
+
+	private RIFGroup compileSuperClass(RIFGroup rules, Element superClass) {
+		String superClassName = superClass.getAttributeNS(RDF_PREFIX, "resource");
+		if (superClassName.length() > 0){
+			superClassDescriptions.addFormula(constructRIFMemeber(instance, superClassName));
+		} else if (superClass.hasChildNodes()){
+			Collection<Element> classes = getChildElementsByTagNameNS(superClass, OWL_PREFIX, "Class");
+			classes.addAll(getChildElementsByTagNameNS(superClass, OWL_PREFIX, "Restriction"));
+			for (Element sc : classes){
+				OWLSuperClassCompiler scc = new OWLSuperClassCompiler(sc, instance, subClassDescriptions);
+				rules = scc.compile(rules);
+			}
+		} else {
+			throw new RuntimeException("rdfs:subClassOf statement is missing an object, either reference or description.");
+		}
+		return rules;
+	}
+
+	// Class Description Compilation methods
+	
+	private RIFGroup compileIntersections(RIFGroup rules, Collection<Element> classIntersections) {
+		for (Element intersection : classIntersections){
+			RIFAnd and = null;
+			
+			Collection<Element> classReferences = getChildElementsByTagNameNS(intersection, RDF_PREFIX, "Description");
+			if (!classReferences.isEmpty()) {
+				and = new RIFAnd();
+				
+				for (Element reference : classReferences){
+					String referenceName = reference.getAttributeNS(RDF_PREFIX, "about");
+					 
+					RIFMember intersectedClassMembership = constructRIFMemeber(instance, referenceName);
+					
+					// class membership of a class intersection implies membership of every intersected class
+					superClassDescriptions.addFormula(intersectedClassMembership);
+					// class membership of all intersected classes implies membership of the class intersection 
+					and.addFormula(intersectedClassMembership);
+				}
+			}
+			
+			Set<RIFAnd> ands = new HashSet<RIFAnd>();
+			if (and != null){
+				ands.add(and);
+			}
+			
+			Collection<Element> classes = getChildElementsByTagNameNS(intersection, OWL_PREFIX, "Class");
+			classes.addAll(getChildElementsByTagNameNS(intersection, OWL_PREFIX, "Restriction"));
+			for (Element ic : classes){
+				OWLIntersectionMemberCompiler imc = new OWLIntersectionMemberCompiler(
+								ic,
+								instance,
+								superClassDescriptions,
+								ands);
+				rules = imc.compile(rules);
+			}
+			// add all possible intersections to the set of bodies implying membership of this class
+			for (RIFAnd a : ands){
+				subClassDescriptions.addFormula(a);
+			}
+		}
+		return rules;
+	}
+
+	private RIFGroup compileUnions(RIFGroup rules, Collection<Element> classUnions) {
+		for (Element union : classUnions){
+			RIFOr or = new RIFOr();
+			
+			Collection<Element> classReferences = getChildElementsByTagNameNS(union, RDF_PREFIX, "Description");
+			for (Element reference : classReferences){
+				String referenceName = reference.getAttributeNS(RDF_PREFIX, "about");
+				 
+				RIFMember unionMembership = constructRIFMemeber(instance, referenceName);
+				
+				// class membership of any of the unioned classes implies membership of the class union
+				subClassDescriptions.addFormula(unionMembership);
+				// class membership of the class union implies membership of at least one of the unioned classes
+				or.addFormula(unionMembership);
+			}
+			
+			Collection<Element> classes = getChildElementsByTagNameNS(union, OWL_PREFIX, "Class");
+			classes.addAll(getChildElementsByTagNameNS(union, OWL_PREFIX, "Restriction"));
+			if (!classes.isEmpty()){
+				for (Element uc : classes){
+					OWLUnionMemberCompiler umc = new OWLUnionMemberCompiler(uc, instance, subClassDescriptions, or);
+					rules = umc.compile(rules);
+				}
+			}
+			
+			// add the union to the set of heads implied by membership of this class, and the class description
+			superClassDescriptions.addFormula(or);
+		}
+		return rules;
+	}
+	
+	private RIFGroup compileComplements(RIFGroup rules, Collection<Element> complementClasses) {
+		for (Element complementClass : complementClasses){
+			String complementClassName = complementClass.getAttributeNS(RDF_PREFIX, "resource");
+			if (complementClassName.length() > 0){
+				RIFMember complementClassMembership = constructRIFMemeber(instance, complementClassName);
+				
+				RIFAnd complementPair = new RIFAnd();
+				complementPair.addFormula(complementClassMembership);
+				complementPair.addFormula(classMembership == null ? subClassDescriptions : classMembership);
+				
+				addRule(rules, new RIFError(), complementPair);
+			}
+			if (complementClass.hasChildNodes()){
+				Collection<Element> classes = getChildElementsByTagNameNS(complementClass, OWL_PREFIX, "Class");
+				classes.addAll(getChildElementsByTagNameNS(complementClass, OWL_PREFIX, "Restriction"));
+				for (Element ec : classes){
+					OWLComplementClassCompiler ccc = new OWLComplementClassCompiler(
+									ec,
+									instance,
+									classMembership == null ? subClassDescriptions : classMembership);
+					rules = ccc.compile(rules);				
+				}
+			}				
+		}
+		return rules;
+	}
+	
+	// Property Restriction Compilation methods
 	
 	private OWLPropertyCompiler prepareRestrictedProperty() {
 		Collection<Element> restrictedProperties = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "onProperty");
@@ -377,18 +524,311 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 				try {
 					return new OWLAnonymousPropertyCompiler(properties.iterator().next(), instance);
 				} catch (NoSuchElementException e) {
-					throw new RuntimeException("No property specified in Restriction " + (subClassDescription == null ? "at ontology root" : subClassDescription.toString()) + ".",e); 
+					throw new RuntimeException("No property specified in Restriction " + (subClassDescriptions == null ? "at ontology root" : subClassDescriptions.toString()) + ".",e); 
 				}
 			}
 		} catch (NoSuchElementException e) {
-			throw new RuntimeException("No property specified in Restriction " + (subClassDescription == null ? "at ontology root" : subClassDescription.toString()) + ".",e); 
+			throw new RuntimeException("No property specified in Restriction " + (subClassDescriptions == null ? "at ontology root" : subClassDescriptions.toString()) + ".",e); 
 		}
 	}
 
-	private RIFGroup compileExistentialRestrictions(RIFGroup rules,
-			Collection<Element> existentialRestrictions, RIFOr classDescription) {
+	private RIFGroup compileExistentialRestrictions(RIFGroup rules, Collection<Element> existentialRestrictions) {
 		OWLPropertyCompiler property = prepareRestrictedProperty();
 		
+		// create a property object var name not previously used in this descent of class descriptions by appending tilda until it no longer appears.
+		String objectVarName = "propertyObject";
+		while (instance.getNode().getName().startsWith(objectVarName)){
+			objectVarName += "~";
+		}
+		RIFVar object = new RIFVar().setName(objectVarName);
+		
+		RIFExists restriction = new RIFExists();
+		
+		RIFAnd body = new RIFAnd();
+		restriction.addFormula(body);
+		
+		RIFGroup subrules = new RIFGroup();
+		subrules = property.compile(subrules, object);
+		
+		for (RIFSentence sentence : subrules){
+			RIFSentence statement;
+			if (sentence instanceof RIFForAll){
+				statement = ((RIFForAll) sentence).getStatement();
+			} else {
+				statement = sentence;
+			}
+			
+			if (statement instanceof RIFRule) {
+				RIFRule rule = (RIFRule) statement;
+				
+				if (rule.getHead() == null){
+					body.addFormula(rule.getBody());
+					continue;
+				}
+				
+				if (rule.getBody() == null){
+					continue;
+				}
+			}
+			
+			rules.addSentence(sentence);
+		}
+		
+		for (Element range : existentialRestrictions){
+			String rangeName = range.getAttributeNS(RDF_PREFIX, "resource");
+
+			if (!rangeName.equals(OWL_PREFIX + "Thing")){
+				// The restriction is qualified...
+				if (rangeName.length() > 0) {
+					// ... with a class/datatype reference
+					body.addFormula(constructRIFMemeber(object, rangeName));
+				} else {
+					// ... with a class description
+					Collection<Element> restrictionQualifiers = getChildElementsByTagNameNS(range, OWL_PREFIX, "Class");
+					restrictionQualifiers.addAll(getChildElementsByTagNameNS(range, OWL_PREFIX, "Restriction"));
+					if (!restrictionQualifiers.isEmpty()){
+						Element restrictionQualifier = restrictionQualifiers.iterator().next();
+						OWLExistentialRangeCompiler erc = new OWLExistentialRangeCompiler(
+																		restrictionQualifier,
+																		object,
+																		body);
+						rules = erc.compile(rules);
+					}
+				}
+			}
+			
+			restriction.addExistentialVar(object);
+			subClassDescriptions.addFormula(restriction);
+
+			return rules;
+		}
+		
+		return rules;
+	}
+
+	private RIFGroup compileUniversalRestrictions(RIFGroup rules, Collection<Element> universalRestrictions) {
+		OWLPropertyCompiler property = prepareRestrictedProperty();
+		
+		// create a property object var name not previously used in this descent of class descriptions by appending tilda until it no longer appears.
+		String objectVarName = "propertyObject";
+		while (instance.getNode().getName().startsWith(objectVarName)){
+			objectVarName += "~";
+		}
+		RIFVar object = new RIFVar().setName(objectVarName);
+		
+		RIFExists restriction = new RIFExists();
+		
+		RIFAnd body = new RIFAnd();
+		restriction.addFormula(body);
+		
+		RIFGroup subrules = new RIFGroup();
+		subrules = property.compile(subrules, object);
+		
+		for (RIFSentence sentence : subrules){
+			RIFSentence statement;
+			if (sentence instanceof RIFForAll){
+				statement = ((RIFForAll) sentence).getStatement();
+			} else {
+				statement = sentence;
+			}
+			
+			if (statement instanceof RIFRule) {
+				RIFRule rule = (RIFRule) statement;
+				
+				if (rule.getHead() == null){
+					body.addFormula(rule.getBody());
+					continue;
+				}
+				
+				if (rule.getBody() == null){
+					continue;
+				}
+			}
+			
+			rules.addSentence(sentence);
+		}
+		
+		body.addFormula(subClassDescriptions);
+		RIFFormula head = new RIFAnd();
+		
+		for (Element range : universalRestrictions){
+			String rangeName = range.getAttributeNS(RDF_PREFIX, "resource");
+			if (rangeName.length() > 0) {
+				// ... with a class/datatype reference
+				head = constructRIFMemeber(object, rangeName);
+			} else {
+				// ... with a class description
+				Collection<Element> restrictionQualifiers = getChildElementsByTagNameNS(range, OWL_PREFIX, "Class");
+				restrictionQualifiers.addAll(getChildElementsByTagNameNS(range, OWL_PREFIX, "Restriction"));
+				if (!restrictionQualifiers.isEmpty()){
+					try{ 
+						Element restrictionQualifier = restrictionQualifiers.iterator().next();
+						OWLUniversalRangeCompiler erc = new OWLUniversalRangeCompiler(
+																		restrictionQualifier,
+																		object,
+																		(RIFAnd) head);
+						rules = erc.compile(rules);
+					} catch (NoSuchElementException e) {
+						throw new RuntimeException("No range specified in Existential Restriction " + (superClassDescriptions == null ? "at ontology root" : superClassDescriptions.toString()) + ".",e); 
+					}
+				}
+			}
+			
+			restriction.addExistentialVar(instance);
+			addRule(rules, object, head, restriction);
+			return rules;
+		}
+		
+		return rules;
+	}
+	
+	private RIFGroup compileValueRestrictions(RIFGroup rules, Collection<Element> valueRestrictions) {
+		OWLPropertyCompiler property = prepareRestrictedProperty();
+		
+		@SuppressWarnings("rawtypes")
+		RIFConst object;
+		if (!valueRestrictions.isEmpty()){
+			Element range = valueRestrictions.iterator().next();
+			
+			String rangeName = range.getAttributeNS(RDF_PREFIX, "resource");
+			if (rangeName.length() > 0) {
+				try { 
+					// construct a datum for the named individual
+					object = new RIFIRIConst().setData(new URI(rangeName));
+				} catch (URISyntaxException e){
+					throw new RuntimeException("Value resource IRI " + rangeName + " is not a valid IRI.", e);
+				}
+			} else if (range.getChildNodes().item(0) == null){
+				throw new RuntimeException("Value restrictions must restrict to either a resource reference, a data value or an individual description.");
+			} else if (range.getChildNodes().item(0).getNodeType() == Node.TEXT_NODE) {
+				String rangeType = range.getAttributeNS(RDF_PREFIX, "datatype");
+				String rangeValue = range.getTextContent();
+				if (rangeType.length() > 0){
+					try {
+						object = new RIFXSDTypedConst(new URI(rangeType)).setData(rangeValue);
+					} catch (URISyntaxException e){
+						throw new RuntimeException("The datatype " + rangeType + " of value " + rangeValue + " is improperly formatted", e);
+					}
+				} else {
+					if (rangeValue.matches(".*\\^\\^.*")){
+						rangeType = rangeValue.substring(rangeValue.lastIndexOf('^') + 1);
+						try {
+							object = new RIFXSDTypedConst(new URI(rangeType)).setData(rangeValue);
+						} catch (URISyntaxException e){
+							throw new RuntimeException("The datatype of value " + rangeValue + " is improperly formatted", e);
+						}
+						rangeValue = rangeValue.substring(0, rangeValue.indexOf('^') - 1);
+					} else if (rangeValue.matches(".*@.*")) {
+						String rangeLocale = rangeValue.substring(rangeValue.lastIndexOf('@') + 1);
+						rangeValue = rangeValue.substring(0, rangeValue.lastIndexOf('@') - 1);
+						object = new RIFLocaleStringConst(rangeLocale).setData(rangeValue);
+					} else {
+						object = new RIFStringConst().setData(rangeValue);
+					}
+				}
+			} else if (range.getChildNodes().item(0).getNodeType() == Node.ELEMENT_NODE) {				
+				Element restrictionQualifier = (Element) range.getChildNodes().item(0);
+				
+				OWLIndividualCompiler erc = new OWLIndividualCompiler(restrictionQualifier);
+				rules = erc.compile(rules);
+				
+				object = erc.getIndividualConst();
+			} else {
+				throw new RuntimeException("Value restrictions must restrict to either a resource reference, a data value or an individual description.");
+			}
+		} else {
+			throw new RuntimeException("SHOULD NEVER HAPPEN (must have been value restrictions to have descended into this method).");
+		}
+		
+		RIFAnd propertyDescription = new RIFAnd();
+		
+		RIFGroup subrules = new RIFGroup();
+		subrules = property.compile(subrules, object);
+		
+		for (RIFSentence sentence : subrules){
+			RIFSentence statement;
+			if (sentence instanceof RIFForAll){
+				statement = ((RIFForAll) sentence).getStatement();
+			} else {
+				statement = sentence;
+			}
+			
+			if (statement instanceof RIFRule) {
+				RIFRule rule = (RIFRule) statement;
+				
+				if (rule.getHead() == null){
+					propertyDescription.addFormula(rule.getBody());
+					continue;
+				}
+				
+				if (rule.getBody() == null){
+					continue;
+				}
+			}
+			
+			rules.addSentence(sentence);
+		}
+		
+		subClassDescriptions.addFormula(propertyDescription);
+		superClassDescriptions.addFormula(propertyDescription);
+		
+		return rules;
+	}
+	
+	private RIFGroup compileCardinalityRestrictions(RIFGroup rules, Collection<Element> cardinalityRestrictions) {
+		int number = -1;
+		for (Element cardRestrict : cardinalityRestrictions){
+			if (cardRestrict.hasChildNodes()){
+				String numberString = cardRestrict.getTextContent();
+				try {
+					number = Integer.parseInt(numberString);
+				} catch (NumberFormatException e) {
+					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
+				}
+			}
+		}
+		
+		if (number < 0) {
+			throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
+		}
+		if (number == 1){
+			for (Element cardRestrict : cardinalityRestrictions){
+				cardRestrict.setAttributeNS(RDF_PREFIX, "resource", OWL_PREFIX + "Thing");
+			}
+			rules = compileExistentialRestrictions(rules, cardinalityRestrictions);
+			return compileMaxCardRestrictions(rules, cardinalityRestrictions);
+		}
+		if (number == 0) {
+			return compileMaxCardRestrictions(rules, cardinalityRestrictions);
+		}
+		
+		logger.info("Cardinality " + number + " restriction ignored in OWL 2 RL.");
+		return rules;
+	}
+	
+	private RIFGroup compileMaxCardRestrictions(RIFGroup rules, Collection<Element> maxCardRestrictions) {
+		int number = -1;
+		for (Element cardRestrict : maxCardRestrictions){
+			if (cardRestrict.hasChildNodes()){
+				String numberString = cardRestrict.getTextContent();
+				try {
+					number = Integer.parseInt(numberString);
+				} catch (NumberFormatException e) {
+					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
+				}
+			}
+		}
+		
+		if (number < 0) {
+			throw new RuntimeException("Maximum Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
+		}
+		if (number > 1) {
+			logger.info("Maximum Cardinality " + number + " Restriction ignored in OWL 2 RL.");
+			return rules;
+		}
+		
+		OWLPropertyCompiler property = prepareRestrictedProperty();
+
 		// create a property object var name not previously used in this descent of class descriptions by appending tilda until it no longer appears.
 		String objectVarName = "propertyObject";
 		while (instance.getNode().getName().startsWith(objectVarName)){
@@ -429,163 +869,262 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 			rules.addSentence(sentence);
 		}
 		
-		for (Element range : existentialRestrictions){
-			String rangeName = range.getAttributeNS(RDF_PREFIX, "resource");
-
-			if (!rangeName.equals("http://www.w3.org/2002/07/owl#Thing")){
-				// The restriction is qualified...
-				// ... so establish an intersection of conditions including the existing triple template
-				
-				if (rangeName.length() > 0) {
-					// ... with a class/datatype reference
-					body.addFormula(constructRIFMemeber(object, rangeName));
+		body.addFormula(classMembership == null ? subClassDescriptions : classMembership);
+		
+		if (number == 0){
+			addRule(rules, new RIFError(), restriction);		
+		} else /*number == 1*/ {
+			// create a property object var name not previously used in this descent of class descriptions by appending tilda until it no longer appears.
+			objectVarName += "~";
+			while (instance.getNode().getName().startsWith(objectVarName)){
+				objectVarName += "~";
+			}
+			RIFVar object2 = new RIFVar().setName(objectVarName);
+			
+			restriction.addExistentialVar(object2);
+			
+			subrules = new RIFGroup();
+			subrules = property.compile(subrules, object2);
+			
+			for (RIFSentence sentence : subrules){
+				RIFSentence statement;
+				if (sentence instanceof RIFForAll){
+					statement = ((RIFForAll) sentence).getStatement();
 				} else {
-					// ... with a class description
-					Collection<Element> restrictionQualifiers = getChildElementsByTagNameNS(range, OWL_PREFIX, "Class");
-					restrictionQualifiers.addAll(getChildElementsByTagNameNS(range, OWL_PREFIX, "Restriction"));
-					if (!restrictionQualifiers.isEmpty()){
-						try{ 
-							Element restrictionQualifier = restrictionQualifiers.iterator().next();
-							OWLExistentialRangeCompiler erc = new OWLExistentialRangeCompiler(
-																			restrictionQualifier,
-																			object,
-																			body);
-							rules = erc.compile(rules);
-						} catch (NoSuchElementException e) {
-							throw new RuntimeException("No range specified in Existential Restriction " + (superClassDescription == null ? "at ontology root" : superClassDescription.toString()) + ".",e); 
-						}
-					}
+					statement = sentence;
 				}
-			}
-			
-			if (superClassDescription != null){
-				addRule(rules, superClassDescription, restriction);
-			}
-			classDescription.addFormula(restriction);
-			return rules;
-		}
-		
-		
-		
-		return rules;
-	}
-
-	private RIFGroup compileComplements(RIFGroup rules, Collection<Element> complementClasses, RIFOr classDescription) {
-		for (Element complementClass : complementClasses){
-			String complementClassName = complementClass.getAttributeNS(RDF_PREFIX, "resource");
-			if (complementClassName.length() > 0){
-				RIFMember complementClassMembership = constructRIFMemeber(instance, complementClassName);
 				
-				RIFAnd complementPair = new RIFAnd();
-				complementPair.addFormula(complementClassMembership);
-				complementPair.addFormula(subClassDescription == null ? classDescription : subClassDescription);
-				
-				RIFError error = new RIFError();
-				
-				addRule(rules, error, complementPair);
-			}
-			if (complementClass.hasChildNodes()){
-				Collection<Element> classes = getChildElementsByTagNameNS(complementClass, OWL_PREFIX, "Class");
-				classes.addAll(getChildElementsByTagNameNS(complementClass, OWL_PREFIX, "Restriction"));
-				if (!classes.isEmpty()){
-					for (Element ec : classes){
-						OWLComplementClassCompiler ccc = new OWLComplementClassCompiler(
-										ec,
-										instance,
-										subClassDescription == null ? classDescription : subClassDescription);
-						rules = ccc.compile(rules);				
-					}
-				}
-			}				
-		}
-		return rules;
-	}
-
-	private RIFGroup compileIntersections(RIFGroup rules, Collection<Element> classIntersections, RIFOr classDescription) {
-		for (Element intersection : classIntersections){
-			RIFAnd and = null;
-			
-			Collection<Element> classReferences = getChildElementsByTagNameNS(intersection, RDF_PREFIX, "Description");
-			if (!classReferences.isEmpty()) {
-				and = new RIFAnd();
-				
-				for (Element reference : classReferences){
-					String referenceName = reference.getAttributeNS(RDF_PREFIX, "about");
-					 
-					RIFMember intersectedClassMembership = constructRIFMemeber(instance, referenceName);
+				if (statement instanceof RIFRule) {
+					RIFRule rule = (RIFRule) statement;
 					
-					// class membership of a class intersection implies membership of every intersected class
-					addRule(rules,
-							intersectedClassMembership,
-							subClassDescription == null ? classDescription : subClassDescription);
-					// class membership of all intersected classes implies membership of the class intersection 
-					and.addFormula(intersectedClassMembership);
+					if (rule.getHead() == null){
+						body.addFormula(rule.getBody());
+						continue;
+					}
+					
+					if (rule.getBody() == null){
+						continue;
+					}
 				}
-			}
-			
-			Set<RIFAnd> ands = new HashSet<RIFAnd>();
-			if (and != null){
-				ands.add(and);
-			}
-			
-			Collection<Element> classes = getChildElementsByTagNameNS(intersection, OWL_PREFIX, "Class");
-			classes.addAll(getChildElementsByTagNameNS(intersection, OWL_PREFIX, "Restriction"));
-			if (!classes.isEmpty()){
-				for (Element ic : classes){
-					OWLIntersectionMemberCompiler imc = new OWLIntersectionMemberCompiler(
-									ic,
-									instance,
-									subClassDescription == null ? classDescription : subClassDescription,
-									ands);
-					rules = imc.compile(rules);
-				}
-			}
-			// add all possible intersections to the set of bodies implying membership of this class
-			for (RIFAnd a : ands){
-				if (superClassDescription != null){
-					addRule(rules, superClassDescription, a);
-				}
-				classDescription.addFormula(a);
-			}
-		}
-		return rules;
-	}
-
-	private RIFGroup compileUnions(RIFGroup rules, Collection<Element> classUnions, RIFOr classDescription) {
-		for (Element union : classUnions){
-			RIFOr or = new RIFOr();
-			
-			Collection<Element> classReferences = getChildElementsByTagNameNS(union, RDF_PREFIX, "Description");
-			for (Element reference : classReferences){
-				String referenceName = reference.getAttributeNS(RDF_PREFIX, "about");
-				 
-				RIFMember unionMembership = constructRIFMemeber(instance, referenceName);
 				
-				// class membership of any of the unioned classes implies membership of the class union
-				if (superClassDescription != null){
-					addRule(rules, superClassDescription, unionMembership);
-				}
-				// class membership of the class union implies membership of at least one of the unioned classes
-				or.addFormula(unionMembership);
+				rules.addSentence(sentence);
 			}
 			
-			Collection<Element> classes = getChildElementsByTagNameNS(union, OWL_PREFIX, "Class");
-			classes.addAll(getChildElementsByTagNameNS(union, OWL_PREFIX, "Restriction"));
-			if (!classes.isEmpty()){
-				for (Element uc : classes){
-					OWLUnionMemberCompiler umc = new OWLUnionMemberCompiler(uc, instance, superClassDescription, or);
-					rules = umc.compile(rules);
-				}
-			}
-			
-			// add the union to the set of heads implied by membership of this class, and the class description
-			addRule(rules, or, subClassDescription);
-			classDescription.addFormula(or);
+			addRule(rules, constructOWLSameAs(object, object2), restriction);
 		}
+
 		return rules;
 	}
 	
+	private RIFGroup compileMinCardRestrictions(RIFGroup rules, Collection<Element> minCardRestrictions) {
+		int number = -1;
+		for (Element cardRestrict : minCardRestrictions){
+			if (cardRestrict.hasChildNodes()){
+				String numberString = cardRestrict.getTextContent();
+				try {
+					number = Integer.parseInt(numberString);
+				} catch (NumberFormatException e) {
+					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
+				}
+			}
+		}
+		
+		if (number < 0) {
+			throw new RuntimeException("Minimum Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
+		}
+		if (number == 0){
+			logger.info("Minimum Cardinality 0 restriction has no effect in OWL 2 RL.");
+			return rules;
+		}
+		if (number == 1){
+			for (Element cardRestrict : minCardRestrictions){
+				cardRestrict.setAttributeNS(RDF_PREFIX, "resource", OWL_PREFIX + "Thing");
+			}
+			return compileExistentialRestrictions(rules, minCardRestrictions);
+		}
+		
+		// Could do something clever with owl:differentFrom here, but it isn't in the OWL 2 RL rules specification.
+		
+		logger.info("Cardinality " + number + " restriction ignored in OWL 2 RL.");
+		return rules;
+	}
+	
+	private RIFGroup compileMaxQualCardRestrictions(RIFGroup rules, Collection<Element> maxQualCardRestrictions) {
+		int number = -1;
+		for (Element cardRestrict : maxQualCardRestrictions){
+			if (cardRestrict.hasChildNodes()){
+				String numberString = cardRestrict.getTextContent();
+				try {
+					number = Integer.parseInt(numberString);
+				} catch (NumberFormatException e) {
+					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
+				}
+			}
+		}
+		
+		if (number < 0) {
+			throw new RuntimeException("Maximum Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
+		}
+		if (number > 1) {
+			logger.info("Maximum Cardinality " + number + " Restriction ignored in OWL 2 RL.");
+			return rules;
+		}
+		
+		// If either max 0 or max 1, compile the property, subject class membership and object class membership into a body formula
+		
+		OWLPropertyCompiler property = prepareRestrictedProperty();
+
+		// create a property object var name not previously used in this descent of class descriptions by appending tilda until it no longer appears.
+		String objectVarName = "propertyObject";
+		while (instance.getNode().getName().startsWith(objectVarName)){
+			objectVarName += "~";
+		}
+		RIFVar object = new RIFVar().setName(objectVarName);
+		
+		RIFExists restriction = new RIFExists();
+		restriction.addExistentialVar(object);
+		
+		RIFAnd body = new RIFAnd();
+		restriction.addFormula(body);
+		
+		RIFGroup subrules = new RIFGroup();
+		subrules = property.compile(subrules, object);
+		
+		for (RIFSentence sentence : subrules){
+			RIFSentence statement;
+			if (sentence instanceof RIFForAll){
+				statement = ((RIFForAll) sentence).getStatement();
+			} else {
+				statement = sentence;
+			}
+			
+			if (statement instanceof RIFRule) {
+				RIFRule rule = (RIFRule) statement;
+				
+				if (rule.getHead() == null){
+					body.addFormula(rule.getBody());
+					continue;
+				}
+				
+				if (rule.getBody() == null){
+					continue;
+				}
+			}
+			
+			rules.addSentence(sentence);
+		}
+		
+		Element restrictionQualifier = null;
+		String rangeName = null;
+		
+		// Extract qualifying class identifiers/descriptive Elements
+		Collection<Element> qualifyingClasses = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "onClass");
+		for (Element range : qualifyingClasses){
+			rangeName = range.getAttributeNS(RDF_PREFIX, "resource");
+
+			if (!rangeName.equals(OWL_PREFIX + "Thing")){
+				if (rangeName.length() == 0) {
+					Collection<Element> restrictionQualifiers = getChildElementsByTagNameNS(range, OWL_PREFIX, "Class");
+					restrictionQualifiers.addAll(getChildElementsByTagNameNS(range, OWL_PREFIX, "Restriction"));
+					if (!restrictionQualifiers.isEmpty()){
+						restrictionQualifier = restrictionQualifiers.iterator().next();
+					}
+				}
+			}
+		}
+		
+		// The restriction is qualified...
+		if (restrictionQualifier == null){
+			if (rangeName == null || rangeName.length() == 0){
+				throw new RuntimeException("All Qualified Cardinality Restrictions must contain a reference or a description of the restricted class.");
+			} else if (!rangeName.equals(OWL_PREFIX + "Thing")){
+				// ... with a class/datatype reference
+				body.addFormula(constructRIFMemeber(object, rangeName));
+			}
+		} else {
+			// ... with a class description
+			OWLExistentialRangeCompiler erc = new OWLExistentialRangeCompiler(
+					restrictionQualifier,
+					object,
+					body);
+			rules = erc.compile(rules);
+		}
+		
+		body.addFormula(classMembership == null ? subClassDescriptions : classMembership);
+		
+		if (number == 0){
+			// Add a rule to express that the body constructed thus far implies an error in the data/ontology
+			addRule(rules, new RIFError(), restriction);		
+		} else /*number == 1*/ {
+			// create a second property object var name not previously used in this descent of class descriptions by appending tilda to the existing property object var name, then repeatedly again until it no longer appears.
+			objectVarName += "~";
+			while (instance.getNode().getName().startsWith(objectVarName)){
+				objectVarName += "~";
+			}
+			RIFVar object2 = new RIFVar().setName(objectVarName);
+			
+			restriction.addExistentialVar(object2);
+			
+			// compile the property again with the second property object
+			
+			subrules = new RIFGroup();
+			subrules = property.compile(subrules, object2);
+			
+			for (RIFSentence sentence : subrules){
+				RIFSentence statement;
+				if (sentence instanceof RIFForAll){
+					statement = ((RIFForAll) sentence).getStatement();
+				} else {
+					statement = sentence;
+				}
+				
+				if (statement instanceof RIFRule) {
+					RIFRule rule = (RIFRule) statement;
+					
+					if (rule.getHead() == null){
+						body.addFormula(rule.getBody());
+						continue;
+					}
+					
+					if (rule.getBody() == null){
+						continue;
+					}
+				}
+				
+				rules.addSentence(sentence);
+			}
+			
+			// The restriction is qualified for the second object as well...
+			if (restrictionQualifier == null){
+				if (rangeName == null || rangeName.length() == 0){
+					throw new RuntimeException("All Qualified Cardinality Restrictions must contain a reference or a description of the restricted class.");
+				} else if (!rangeName.equals(OWL_PREFIX + "Thing")){
+					// ... with a class/datatype reference
+					body.addFormula(constructRIFMemeber(object2, rangeName));
+				}
+			} else {
+				// ... with a class description
+				OWLExistentialRangeCompiler erc = new OWLExistentialRangeCompiler(
+						restrictionQualifier,
+						object2,
+						body);
+				rules = erc.compile(rules);
+			}
+			
+			// add a rule specifying that when two individuals of the qualifying class are linked to the same instance by the given predicate, they must be the same individual. 
+			addRule(rules, constructOWLSameAs(object, object2), restriction);
+		}
+
+		return rules;
+	}
+	
+	// methods for abbreviating adding RIFForAll wrapped rules to the ruleset
+
 	protected RIFGroup addRule(RIFGroup rules, RIFFormula head, RIFFormula body){
+		return addRule(rules, instance, head, body);
+	}
+	
+	protected RIFGroup addRule(RIFGroup rules, RIFVar instance, RIFFormula head, RIFFormula body){
 		RIFForAll forall = new RIFForAll();
 		forall.addUniversalVar(instance);
 		
@@ -600,103 +1139,24 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 	
 }
 
-class OWLExistentialRangeCompiler extends OWLClassCompiler {
-
-	private final RIFMember rangeMembership;
-	private final boolean anonymous;
-	private final RIFAnd body;
-	
-	public OWLExistentialRangeCompiler(Element clazz, RIFVar instance, RIFAnd propertyAssertion) {
-		super(clazz, instance);
-		this.body = propertyAssertion;
-		
-		// get class URI
-		String rangeName = clazz.getAttributeNS(RDF_PREFIX, "about");
-		if (rangeName.length() > 0){
-			anonymous = false;
-			rangeMembership = constructRIFMemeber(instance, rangeName);
-		} else {
-			anonymous = true;
-			rangeMembership = new RIFAnon();
-			rangeMembership.setInstance(instance);
-		}
-		this.subClassDescription = rangeMembership;
-		this.superClassDescription = rangeMembership;
-	}
-	
-	public RIFGroup compile(RIFGroup rules){
-		RIFGroup subrules;
-		if (anonymous){
-			subrules = new RIFGroup();
-		} else {
-			subrules = rules;
-			this.body.addFormula(rangeMembership);
-		}
-		
-		subrules = this.compileProper(subrules);
-		
-		if (anonymous){
-			RIFOr qualifyingBodies = new RIFOr();
-			for (RIFSentence sentence : subrules){
-				RIFSentence statement;
-				if (sentence instanceof RIFForAll){
-					statement = ((RIFForAll) sentence).getStatement();
-				} else {
-					statement = sentence;
-				}
-
-				if (statement instanceof RIFRule) {
-					RIFRule rule = (RIFRule) statement;
-
-					// bodies of headless rules from a qualifying class are also part of the implication of membership of this class
-					if (rule.getHead() == rangeMembership){
-						qualifyingBodies.addFormula(rule.getBody());
-						continue;
-					}
-					// where rangeMembership implies something, this is ignored
-					if (rule.getBody() == rangeMembership){
-						continue;
-					}
-				}
-
-				rules.addSentence(sentence);
-			}
-			
-			this.body.addFormula(qualifyingBodies);
-		}
-		
-		return rules;
-	}
-	
-}
+// Compilers for equivalent- and superclasses
 
 class OWLEquivalentClassCompiler extends OWLClassCompiler {
 
-	private final RIFFormula classMembership;
-
-	public OWLEquivalentClassCompiler(Element clazz, RIFVar instance, RIFFormula equivalentClassDescription) {
+	public OWLEquivalentClassCompiler(Element clazz, RIFVar instance, RIFOr inheritedSubClass, RIFAnd inheritedSuperClass) {
 		super(clazz, instance);
 		
-		String className = clazz.getAttributeNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "about");
-		if (className.length() > 0){
-			classMembership = constructRIFMemeber(instance, className); 
+		if (classMembership == null){
+			subClassDescriptions.addFormula(inheritedSubClass);
+			superClassDescriptions.addFormula(inheritedSuperClass);
 		} else {
-			classMembership = null;
+			inheritedSubClass.addFormula(classMembership);
+			inheritedSuperClass.addFormula(classMembership);
 		}
-		
-		subClassDescription = equivalentClassDescription;
-		superClassDescription = equivalentClassDescription;
 	}
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
-		if (classMembership != null){
-			addRule(rules, classMembership, subClassDescription);
-			addRule(rules, superClassDescription, classMembership);
-			subClassDescription = classMembership;
-			superClassDescription = classMembership;
-		}
-		// TODO Auto-generated method stub
 		return this.compileProper(rules);
 	}
 	
@@ -704,58 +1164,43 @@ class OWLEquivalentClassCompiler extends OWLClassCompiler {
 
 class OWLSuperClassCompiler extends OWLClassCompiler {
 
-	private final RIFFormula classMembership;
-
-	public OWLSuperClassCompiler(Element clazz, RIFVar instance, RIFFormula subClassDescription) {
+	public OWLSuperClassCompiler(Element clazz, RIFVar instance, RIFOr subClassDescription) {
 		super(clazz, instance);
 		
-		String className = clazz.getAttributeNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "about");
-		if (className.length() > 0){
-			classMembership = constructRIFMemeber(instance, className); 
+		if (classMembership == null){
+			this.subClassDescriptions.addFormula(subClassDescription);
 		} else {
-			classMembership = null;
+			subClassDescription.addFormula(classMembership);
 		}
-		
-		this.subClassDescription = subClassDescription;
 	}
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
-		if (classMembership != null){
-			addRule(rules, classMembership, subClassDescription);
-			subClassDescription = classMembership;
-			superClassDescription = classMembership;
-		}
-		// TODO Auto-generated method stub
 		return this.compileProper(rules);
 	}
 	
 }
 
+// Compilers for class description components
+
 class OWLIntersectionMemberCompiler extends OWLClassCompiler {
 
 	private final boolean anonymous;
-	private final RIFMember classMembership;
-	private final RIFFormula parentClassDescription;
+	private final RIFAnd parentClassDescription;
 	private final Collection<RIFAnd> intersections;
 	
-	public OWLIntersectionMemberCompiler(Element clazz, RIFVar instance, RIFFormula parentClassDescription, Collection<RIFAnd> intersections) {
+	public OWLIntersectionMemberCompiler(Element clazz, RIFVar instance, RIFAnd parentSuperClasses, Collection<RIFAnd> intersections) {
 		super(clazz, instance);
 		this.intersections = intersections;
-		this.parentClassDescription = parentClassDescription;
+		this.parentClassDescription = parentSuperClasses;
 		
-		// get class URI
-		String className = clazz.getAttributeNS(RDF_PREFIX, "about");
-		if (className.length() > 0){
-			anonymous = false;
-			classMembership = constructRIFMemeber(instance, className);
-		} else {
+		if (classMembership == null){
 			anonymous = true;
 			classMembership = new RIFAnon();
 			classMembership.setInstance(instance);
+		} else {
+			anonymous = false;
 		}
-		this.subClassDescription = classMembership;
-		this.superClassDescription = classMembership;
 	}
 	
 	@Override
@@ -765,7 +1210,7 @@ class OWLIntersectionMemberCompiler extends OWLClassCompiler {
 			subrules = new RIFGroup();
 		} else {
 			subrules = rules;
-			addRule(rules, classMembership, parentClassDescription);
+			parentClassDescription.addFormula(classMembership);
 			for (RIFAnd intersection : intersections){
 				intersection.addFormula(classMembership);
 			}
@@ -789,9 +1234,7 @@ class OWLIntersectionMemberCompiler extends OWLClassCompiler {
 					RIFRule rule = (RIFRule) statement;
 					// heads of bodyless rules from a class intersection are also implied by membership of this class
 					if (rule.getBody() == classMembership){
-						addRule(rules,
-								rule.getHead(),
-								parentClassDescription);
+						parentClassDescription.addFormula(rule.getHead());
 						continue;
 					}
 					// bodies of headless rules from a class intersection each contribute to implying membership of this class
@@ -831,29 +1274,21 @@ class OWLIntersectionMemberCompiler extends OWLClassCompiler {
 class OWLUnionMemberCompiler extends OWLClassCompiler {
 
 	private final RIFOr union;
-	private final RIFFormula parentClassDescription;
-	private final RIFMember classMembership;
+	private final RIFOr parentClassDescription;
 	private final boolean anonymous;
 
-	public OWLUnionMemberCompiler(Element clazz, RIFVar instance, RIFFormula parentClassDescription, RIFOr union) {
+	public OWLUnionMemberCompiler(Element clazz, RIFVar instance, RIFOr parentClassDescription, RIFOr union) {
 		super(clazz, instance);
 		this.union = union;
 		this.parentClassDescription = parentClassDescription;
 		
-		// get class URI
-		String className = clazz.getAttributeNS(RDF_PREFIX, "about");
-		if (className.length() > 0){
-			anonymous = false;
-			classMembership = constructRIFMemeber(instance, className);
-			this.subClassDescription = classMembership;
-			this.superClassDescription = classMembership;
-		} else {
+		if (classMembership == null){
 			anonymous = true;
 			classMembership = new RIFAnon();
 			classMembership.setInstance(instance);
+		} else {
+			anonymous = false;
 		}
-		this.subClassDescription = classMembership;
-		this.superClassDescription = classMembership;
 	}
 	
 	@Override
@@ -863,9 +1298,7 @@ class OWLUnionMemberCompiler extends OWLClassCompiler {
 			subrules = new RIFGroup();
 		} else {
 			subrules = rules;
-			if (parentClassDescription != null){
-				addRule(rules, parentClassDescription, classMembership);
-			}
+			parentClassDescription.addFormula(classMembership);
 			union.addFormula(classMembership);
 		}
 		
@@ -886,9 +1319,7 @@ class OWLUnionMemberCompiler extends OWLClassCompiler {
 					
 					// bodies of headless rules from a class union also imply membership of this class
 					if (rule.getHead() == classMembership){
-						if (parentClassDescription != null){
-							addRule(rules, parentClassDescription, rule.getBody());
-						}
+						parentClassDescription.addFormula(rule.getBody());
 						continue;
 					}
 					// all heads of bodyless rules, collectively, from a class union are also potentially implied by membership of this class
@@ -911,27 +1342,19 @@ class OWLUnionMemberCompiler extends OWLClassCompiler {
 class OWLComplementClassCompiler extends OWLClassCompiler {
 	
 	private final RIFFormula complementClassDescription;
-	private final RIFMember classMembership;
 	private final boolean anonymous;
 	
 	public OWLComplementClassCompiler(Element clazz, RIFVar instance, RIFFormula complementClassDescription) {
 		super(clazz, instance);
 		this.complementClassDescription = complementClassDescription;
 		
-		// get class URI
-		String className = clazz.getAttributeNS(RDF_PREFIX, "about");
-		if (className.length() > 0){
-			anonymous = false;
-			classMembership = constructRIFMemeber(instance, className);
-			this.subClassDescription = classMembership;
-			this.superClassDescription = classMembership;
-		} else {
+		if (classMembership == null){
 			anonymous = true;
 			classMembership = new RIFAnon();
 			classMembership.setInstance(instance);
+		} else {
+			anonymous = false;
 		}
-		this.subClassDescription = classMembership;
-		this.superClassDescription = classMembership;
 	}
 	
 	@Override
@@ -945,9 +1368,7 @@ class OWLComplementClassCompiler extends OWLClassCompiler {
 			complementPair.addFormula(classMembership);
 			complementPair.addFormula(complementClassDescription);
 			
-			RIFError error = new RIFError();
-			
-			addRule(rules, error, complementPair);
+			addRule(rules, new RIFError(), complementPair);
 		}
 		
 		subrules = this.compileProper(subrules);
@@ -970,9 +1391,7 @@ class OWLComplementClassCompiler extends OWLClassCompiler {
 						complementPair.addFormula(rule.getBody());
 						complementPair.addFormula(complementClassDescription);
 						
-						RIFError error = new RIFError();
-						
-						addRule(rules, error, complementPair);
+						addRule(rules, new RIFError(), complementPair);
 						continue;
 					}
 					// membership of this class implies nothing specific 
@@ -990,12 +1409,144 @@ class OWLComplementClassCompiler extends OWLClassCompiler {
 	
 }
 
+// Compilers for restriction ranges
+
+class OWLExistentialRangeCompiler extends OWLClassCompiler {
+
+	private final boolean anonymous;
+	private final RIFAnd body;
+	
+	public OWLExistentialRangeCompiler(Element clazz, RIFVar instance, RIFAnd propertyAssertion) {
+		super(clazz, instance);
+		this.body = propertyAssertion;
+
+		if (classMembership == null){
+			anonymous = true;
+			classMembership = new RIFAnon();
+			classMembership.setInstance(instance);
+		} else {
+			anonymous = false;
+		}
+	}
+	
+	public RIFGroup compile(RIFGroup rules){
+		RIFGroup subrules;
+		if (anonymous){
+			subrules = new RIFGroup();
+		} else {
+			subrules = rules;
+			this.body.addFormula(classMembership);
+		}
+		
+		subrules = this.compileProper(subrules);
+		
+		if (anonymous){
+			RIFOr qualifyingBodies = new RIFOr();
+			for (RIFSentence sentence : subrules){
+				RIFSentence statement;
+				if (sentence instanceof RIFForAll){
+					statement = ((RIFForAll) sentence).getStatement();
+				} else {
+					statement = sentence;
+				}
+
+				if (statement instanceof RIFRule) {
+					RIFRule rule = (RIFRule) statement;
+
+					// bodies of headless rules from a qualifying class are also part of the implication of membership of this class
+					if (rule.getHead() == classMembership){
+						qualifyingBodies.addFormula(rule.getBody());
+						continue;
+					}
+					// where rangeMembership implies something, this is ignored
+					if (rule.getBody() == classMembership){
+						continue;
+					}
+				}
+
+				rules.addSentence(sentence);
+			}
+			
+			this.body.addFormula(qualifyingBodies);
+		}
+		
+		return rules;
+	}
+	
+}
+
+class OWLUniversalRangeCompiler extends OWLClassCompiler {
+
+	private final boolean anonymous;
+	private final RIFAnd head;
+	
+	public OWLUniversalRangeCompiler(Element clazz, RIFVar instance, RIFAnd propertyAssertion) {
+		super(clazz, instance);
+		this.head = propertyAssertion;
+		
+		if (classMembership == null){
+			anonymous = true;
+			classMembership = new RIFAnon();
+			classMembership.setInstance(instance);
+		} else {
+			anonymous = false;
+		}
+	}
+	
+	public RIFGroup compile(RIFGroup rules){
+		RIFGroup subrules;
+		if (anonymous){
+			subrules = new RIFGroup();
+		} else {
+			subrules = rules;
+			this.head.addFormula(classMembership);
+		}
+		
+		subrules = this.compileProper(subrules);
+		
+		if (anonymous){
+			RIFOr qualifyingBodies = new RIFOr();
+			for (RIFSentence sentence : subrules){
+				RIFSentence statement;
+				if (sentence instanceof RIFForAll){
+					statement = ((RIFForAll) sentence).getStatement();
+				} else {
+					statement = sentence;
+				}
+
+				if (statement instanceof RIFRule) {
+					RIFRule rule = (RIFRule) statement;
+
+					// where rangeMembership is implied by something, this is ignored
+					if (rule.getHead() == classMembership){
+						continue;
+					}
+					// heads of bodyless rules from a qualifying class are also part of the implied membership of this class
+					if (rule.getBody() == classMembership){
+						qualifyingBodies.addFormula(rule.getBody());
+						continue;
+					}
+				}
+
+				rules.addSentence(sentence);
+			}
+			
+			this.head.addFormula(qualifyingBodies);
+		}
+		
+		return rules;
+	}	
+
+}
+
+// Compilers for properties
+
 abstract class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 
 	protected final Element property;
 	
-	protected RIFFormula subPropertyDescription = null;
-	protected RIFFormula superPropertyDescription = null;
+	protected RIFOr subPropertyDescription = new RIFOr();
+	protected RIFAnd superPropertyDescription = new RIFAnd();
 	
 	protected final RIFVar subject;
 	protected RIFIRIConst propertyIRI = null;
@@ -1080,8 +1631,16 @@ class OWLReferencedPropertyCompiler extends OWLPropertyCompiler {
 		frame.setPredicate(propertyIRI);
 		frame.setObject(object);
 		
-		addRule(rules, frame, subPropertyDescription);
-		addRule(rules, superPropertyDescription, frame);
+		if (subPropertyDescription.iterator().hasNext()){
+			addRule(rules, frame, subPropertyDescription);
+		} else {
+			addRule(rules, frame, null);
+		}
+		if (superPropertyDescription.iterator().hasNext()){
+			addRule(rules, superPropertyDescription, frame);
+		} else {
+			addRule(rules, null, frame);
+		}
 		
 		return rules;
 	}
@@ -1092,18 +1651,16 @@ class OWLAnonymousPropertyCompiler extends OWLPropertyCompiler {
 	
 	public OWLAnonymousPropertyCompiler(Element property, RIFVar subject, RIFDatum object) {
 		super(property, subject, object);
-		// TODO Auto-generated constructor stub
 	}
 	
 	public OWLAnonymousPropertyCompiler(Element property, RIFVar subject) {
 		super(property, subject);
-		// TODO Auto-generated constructor stub
 	}
 
 	@Override
 	protected RIFGroup compileProper(RIFGroup rules) {
 		// TODO Auto-generated method stub
-		return null;
+		return rules;
 	}
 	
 }
@@ -1127,7 +1684,75 @@ class OWLNamedPropertyCompiler extends OWLPropertyCompiler {
 	@Override
 	protected RIFGroup compileProper(RIFGroup rules) {
 		// TODO Auto-generated method stub
-		return null;
+		return rules;
+	}
+	
+}
+
+// Compiler for individuals
+
+class OWLIndividualCompiler extends OWLTranslater<RIFGroup>{
+
+	protected static int anonCount = 0; 
+	
+	protected final Element individual;
+	
+	protected final RIFIRIConst className;
+	protected final RIFURIConst identifier;
+	
+	public OWLIndividualCompiler(Element individual){
+		this.individual = individual;
+		
+		String cName = individual.getTagName();
+		URI classURI;
+		try {
+			classURI = new URI(cName);
+		} catch (URISyntaxException e) {
+			throw new RuntimeException("Resource IRI " + cName + " is not a valid URI.", e);
+		}
+		className = new RIFIRIConst().setData(classURI);
+		
+		String identifierString = individual.getAttributeNS(RDF_PREFIX, "about");
+		URI identURI = null;
+		boolean local = false;
+		try {
+			identURI = new URI(identifierString);
+		} catch (URISyntaxException e) {
+			local = true;
+			if (identifierString.length() > 0){
+				try {
+					identURI = new URI(individual.getBaseURI()+identifierString);
+				} catch (URISyntaxException e1) {
+					throw new RuntimeException("Base URI " + individual.getBaseURI() + " plus identifier " + identifierString + " is not a valid URI.", e);
+				}
+			} else {
+				try {
+					identURI = new URI(individual.getBaseURI()+"AnonymousIdentifier-"+anonCount);
+					anonCount++;
+				} catch (URISyntaxException e1) {
+					throw new RuntimeException("SHOULD NEVER HAPPEN, base URI " + individual.getBaseURI() + " plus AnonymousIdentifier-" + anonCount, e);
+				}
+			}
+		}
+		if (local) {
+			identifier = new RIFLocalConst().setData(identURI);
+		} else {
+			identifier = new RIFIRIConst().setData(identURI);
+		}
+	}
+	
+	public RIFIRIConst getClassConst(){
+		return className;
+	}
+	
+	public RIFURIConst getIndividualConst(){
+		return identifier;
+	}
+	
+	@Override
+	public RIFGroup compile(RIFGroup rules) {
+		// TODO Auto-generated method stub
+		return rules;
 	}
 	
 }
