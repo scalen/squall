@@ -72,5 +72,39 @@ public class RIFExists implements RIFFormula {
 			if (var.getNode().getName().equals(varName)) return var;
 		return null;
 	}
+	
+	@Override
+	public String toString(String spacing) {
+		StringBuilder string = new StringBuilder("Exists");
+		for (RIFVar var : this.existentialVars()){
+			string.append(" ")
+				  .append(var.getNode().toString());
+		}
+		
+		return string.append(" (\n")
+					 .append(spacing)
+					 .append("  ")
+				 	 .append(formula.toString(spacing + "  "))
+				 	 .append("\n")
+				 	 .append(spacing)
+				 	 .append(")")
+				 	 .toString();
+	}
+	
+	@Override
+	public String toString() {
+		StringBuilder string = new StringBuilder("Exists");
+		for (RIFVar var : this.existentialVars()){
+			string.append(" ")
+				  .append(var.getNode().toString());
+		}
+		
+		return string.append(" (\n")
+					 .append("  ")
+				 	 .append(formula.toString("  "))
+				 	 .append("\n")
+				 	 .append(")")
+				 	 .toString();
+	}
 
 }

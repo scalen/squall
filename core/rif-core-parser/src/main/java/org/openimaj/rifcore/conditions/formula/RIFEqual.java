@@ -83,4 +83,20 @@ public class RIFEqual implements RIFFormula, Iterable<RIFDatum> {
 		};
 	}
 	
+	@Override
+	public String toString(String spacing) {
+		return new StringBuilder(left.getNode().toString())
+						.append(" = ")
+						.append(right.getNode().toString())
+						.toString();
+	}
+	
+	@Override
+	public String toString() {
+		return new StringBuilder(left.getNode().toString())
+						.append(" = ")
+						.append(right.getNode().toString())
+						.toString();
+	}
+	
 }

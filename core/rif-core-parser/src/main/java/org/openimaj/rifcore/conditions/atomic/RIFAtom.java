@@ -64,5 +64,39 @@ public class RIFAtom extends RIFAtomic implements Iterable<RIFDatum> {
 	public Iterator<RIFDatum> iterator(){
 		return this.args.iterator();
 	}
+	
+	@Override
+	public String toString(String spacing) {
+		StringBuilder string = new StringBuilder(op.getNode().toString())
+										.append("(");
+		if (!this.args.isEmpty()){
+			for (RIFDatum arg : this){
+				string.append("\n")
+					  .append(spacing)
+					  .append("  ")
+					  .append(arg.getNode().toString());
+			}
+			string.append("\n")
+				  .append(spacing);
+		}
+		return string.append(")")
+					 .toString();
+	}
+	
+	@Override
+	public String toString() {
+		StringBuilder string = new StringBuilder(op.getNode().toString())
+										.append("(");
+		if (!this.args.isEmpty()){
+			for (RIFDatum arg : this){
+				string.append("\n")
+					  .append("  ")
+					  .append(arg.getNode().toString());
+			}
+			string.append("\n");
+		}
+		return string.append(")")
+					 .toString();
+	}
 
 }

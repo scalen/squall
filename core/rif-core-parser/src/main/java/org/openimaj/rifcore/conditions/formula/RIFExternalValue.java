@@ -30,4 +30,26 @@ public class RIFExternalValue implements RIFExternal, RIFFormula {
 		throw new UnsupportedOperationException("RIF: Cannot encapsulate formuli within a RIF external statement.");
 	}
 	
+	@Override
+	public String toString(String spacing) {
+		return new StringBuilder("External (\n")
+						.append(spacing)
+						.append("  ")
+						.append(val.toString(spacing + "  "))
+						.append("\n")
+						.append(spacing)
+						.append(")")
+						.toString();
+	}
+	
+	@Override
+	public String toString() {
+		return new StringBuilder("External (\n")
+						.append("  ")
+						.append(val.toString("  "))
+						.append("\n")
+						.append(")")
+						.toString();
+	}
+	
 }

@@ -8,4 +8,6 @@ import org.openimaj.rifcore.RIFMetaHolder;
  */
 public abstract class RIFSentence extends RIFMetaHolder {
 
+	public abstract String toString(String spacing); 
+	
 }

@@ -45,6 +45,22 @@ public class RIFRule extends RIFStatement {
 	public RIFFormula getHead(){
 		return this.head;
 	}
+	
+	@Override
+	public String toString(String spacing) {
+		return new StringBuilder(head.toString(spacing))
+						.append(" :- ")
+						.append(body.toString(spacing))
+						.toString();
+	}
+	
+	@Override
+	public String toString() {
+		return new StringBuilder(head.toString())
+						.append(" :- ")
+						.append(body.toString())
+						.toString();
+	}
 
 
 }

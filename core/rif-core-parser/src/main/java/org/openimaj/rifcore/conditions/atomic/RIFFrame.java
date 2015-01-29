@@ -143,4 +143,35 @@ public class RIFFrame extends RIFAtomic {
 		
 	}
 	
+	@Override
+	public String toString(String spacing) {
+		StringBuilder string = new StringBuilder(subject.getNode().toString())
+										.append(" [\n");
+		for (int i = 0; i < this.getPredicateObjectPairCount(); i++){
+			string.append(spacing).append("  ")
+				  .append(this.getPredicate(i).getNode().toString())
+				  .append(" -> ")
+				  .append(this.getObject(i).getNode().toString())
+				  .append("\n");
+		}
+		return string.append(spacing)
+					 .append("]")
+					 .toString();
+	}
+	
+	@Override
+	public String toString() {
+		StringBuilder string = new StringBuilder(subject.getNode().toString())
+										.append(" [\n");
+		for (int i = 0; i < this.getPredicateObjectPairCount(); i++){
+			string.append("  ")
+				  .append(this.getPredicate(i).getNode().toString())
+				  .append(" -> ")
+				  .append(this.getObject(i).getNode().toString())
+				  .append("\n");
+		}
+		return string.append("]")
+					 .toString();
+	}
+	
 }

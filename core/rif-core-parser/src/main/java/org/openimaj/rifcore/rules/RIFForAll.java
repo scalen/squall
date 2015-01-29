@@ -75,4 +75,21 @@ public class RIFForAll extends RIFSentence {
 		return null;
 	}
 
+	@Override
+	public String toString(String spacing) {
+		StringBuilder string = new StringBuilder("Forall");
+		for (RIFVar var : this.universalVars()){
+			string.append(" ")
+				  .append(var.getNode().toString());
+		}
+		return string.append(" (\n")
+					 .append(spacing)
+					 .append("  ")
+					 .append(statement.toString(spacing + "  "))
+					 .append("\n")
+					 .append(spacing)
+					 .append(")")
+					 .toString();
+	}
+	
 }

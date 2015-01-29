@@ -50,5 +50,21 @@ public class RIFMember implements RIFFormula {
 	public void addFormula(RIFFormula formula) {
 		throw new UnsupportedOperationException("RIF: Cannot encapsulate formuli within a RIF membership statement.");
 	}
+	
+	@Override
+	public String toString(String spacing) {
+		return new StringBuilder(instance.getNode().toString())
+						.append(" # ")
+						.append(inClass.getNode().toString())
+						.toString();
+	}
+	
+	@Override
+	public String toString() {
+		return new StringBuilder(instance.getNode().toString())
+						.append(" # ")
+						.append(inClass.getNode().toString())
+						.toString();
+	}
 
 }

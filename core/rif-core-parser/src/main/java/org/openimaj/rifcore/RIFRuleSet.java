@@ -343,7 +343,7 @@ public class RIFRuleSet implements Iterable<RIFGroup> {
 		}
 		String fgroups = "groups:";
 		for (RIFSentence sentence : rootGroup){
-			fgroups += "\n"+sentence.toString();
+			fgroups += "\n    "+sentence.toString("    ");
 		}
 		return "[ \n  "+fbase+"\n  "+fprefixes+"\n  "+fimports+"\n  "+fgroups+"\n]";
 	}

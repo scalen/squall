@@ -11,4 +11,6 @@ public interface RIFFormula {
 	 */
 	public void addFormula(RIFFormula formula);
 
+	public String toString(String spacing);
+
 }
