@@ -6,6 +6,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
@@ -15,6 +16,7 @@ import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.log4j.Logger;
 import org.openimaj.rifcore.RIFRuleSet;
+import org.openimaj.rifcore.conditions.RIFExternal;
 import org.openimaj.rifcore.conditions.atomic.RIFError;
 import org.openimaj.rifcore.conditions.atomic.RIFFrame;
 import org.openimaj.rifcore.conditions.data.RIFConst;
@@ -28,6 +30,7 @@ import org.openimaj.rifcore.conditions.data.RIFVar;
 import org.openimaj.rifcore.conditions.data.RIFXSDTypedConst;
 import org.openimaj.rifcore.conditions.formula.RIFAnd;
 import org.openimaj.rifcore.conditions.formula.RIFAnon;
+import org.openimaj.rifcore.conditions.formula.RIFEqual;
 import org.openimaj.rifcore.conditions.formula.RIFExists;
 import org.openimaj.rifcore.conditions.formula.RIFFormula;
 import org.openimaj.rifcore.conditions.formula.RIFMember;
@@ -130,8 +133,12 @@ abstract class OWLTranslater <IO> {
 		Node child = children.item(0);
 		if (child != null){
 			for (int i = 1; i < children.getLength(); child = children.item(i++)){
-				if (child.getLocalName().equals(tag) && child.getNamespaceURI().equals(namespace) && child.getNodeType() == Node.ELEMENT_NODE){
-						result.add((Element) child);
+				if (child.getLocalName() == null ? child.getNodeName().endsWith(tag) : child.getLocalName().equals(tag)){
+					if (child.getLocalName() == null ? child.getNodeName().startsWith(namespace) : child.getNamespaceURI().equals(namespace)){
+						if (child.getNodeType() == Node.ELEMENT_NODE){
+							result.add((Element) child);
+						}
+					}
 				}
 			}
 		}
@@ -144,24 +151,24 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 	
 	private static final Logger logger = Logger.getLogger(OntologyCompiler.class);
 	
-	private Document doc;
+	private Element rdf;
 	
-	public OntologyCompiler(InputStream stream){
+	public OntologyCompiler(InputStream stream) throws SAXException, IOException {
 		DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
 		dbFactory.setNamespaceAware(true);
 		DocumentBuilder dBuilder;
 		try {
 			dBuilder = dbFactory.newDocumentBuilder();
-			doc = dBuilder.parse(stream);
+			Document doc = dBuilder.parse(stream);
 			
 			doc.getDocumentElement().normalize();
+			
+			rdf = (Element) doc.getElementsByTagNameNS(RDF_PREFIX, "RDF").item(0);
+			
+			if (rdf == null){
+				throw new Error("Missing RDF element in RDF/XML ontology specification");
+			}
 		} catch (ParserConfigurationException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (SAXException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
@@ -174,11 +181,11 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 		
 		RIFGroup rules = new RIFGroup();
 		
-		rules = compileClassDescriptions(rules);
+		rules.addSentence(compileClassDescriptions());
 		
-		rules = compilePropertyDescriptions(rules);
+		rules.addSentence(compilePropertyDescriptions());
 		
-		rules = compileIndividualDescriptions(rules);
+		rules.addSentence(compileIndividualDescriptions());
 		
 		ruleSet.addRootGroup(rules);
 		
@@ -186,9 +193,9 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 	}
 	
 	private RIFRuleSet compilePrefixes(RIFRuleSet ruleSet){
-		Node attr = doc.getAttributes().item(0);
+		Node attr = rdf.getAttributes().item(0);
 		if (attr != null){
-			for (int i = 1; i < doc.getAttributes().getLength(); attr = doc.getAttributes().item(i++)){
+			for (int i = 1; i < rdf.getAttributes().getLength(); attr = rdf.getAttributes().item(i++)){
 				Attr attribute = (Attr) attr;
 				if (attribute.getName().startsWith("xmlns:")){
 					try {
@@ -204,7 +211,7 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 	}
 	
 	private RIFRuleSet compileImports(RIFRuleSet ruleSet){
-		Collection<Element> ontologies = getChildElementsByTagNameNS((Element) doc, OWL_PREFIX, "Ontology");
+		Collection<Element> ontologies = getChildElementsByTagNameNS((Element) rdf, OWL_PREFIX, "Ontology");
 		for (Element o : ontologies){
 			Collection<Element> imports = getChildElementsByTagNameNS((Element) o, OWL_PREFIX, "imports");
 			for (Element i : imports){
@@ -220,32 +227,209 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 		return ruleSet;
 	}
 	
-	private RIFGroup compileClassDescriptions(RIFGroup rules) {
+	private RIFGroup compileClassDescriptions() {
 		RIFGroup classRules = new RIFGroup();
 		
-		Collection<Element> classes = getChildElementsByTagNameNS((Element) doc, OWL_PREFIX, "Class");
-		classes.addAll(getChildElementsByTagNameNS((Element) doc, OWL_PREFIX, "Restriction"));
+		Collection<Element> classes = getChildElementsByTagNameNS(rdf, OWL_PREFIX, "Class");
+		classes.addAll(getChildElementsByTagNameNS(rdf, OWL_PREFIX, "Restriction"));
 		for (Element c :classes){
 			RIFVar instance = new RIFVar().setName("instance");
 			OWLClassCompiler cc = new OWLClassCompiler(c, instance);
 			classRules = cc.compile(classRules);
 		}
 		
-		rules.addSentence(classRules);
+		return cleanRIFCoreRules(classRules);
+	}
+	
+	private RIFGroup cleanRIFCoreRules(RIFGroup rules){
+		RIFGroup cleanRules = new RIFGroup();
+		
+		for (RIFSentence sentence : rules){
+			if (sentence instanceof RIFGroup){
+				cleanRules.addSentence(cleanRIFCoreRules((RIFGroup) sentence));
+			} else {
+				RIFSentence statement;
+				if (sentence instanceof RIFForAll) {
+					statement = ((RIFForAll) sentence).getStatement();
+				} else {
+					statement = sentence; 
+				}
+				
+				if (statement instanceof RIFRule){
+					RIFRule rule = (RIFRule) statement;
+					
+					RIFFormula head;
+					if (rule.getHead() instanceof RIFAnd){
+						head = flattenFormula((RIFAnd) rule.getHead());
+					} else {
+						head = rule.getHead();
+					}
+					
+					boolean valid = true;
+					if (head instanceof RIFAnd){
+						head = flattenFormula((RIFAnd) head);
+					}
+					if (head instanceof RIFAnd){
+						for (RIFFormula h : (RIFAnd) head){
+							if (h instanceof RIFOr
+									|| h instanceof RIFExists
+									|| h instanceof RIFExternal
+									|| h instanceof RIFEqual){
+								valid = false;
+							}
+						}
+					} else if (head instanceof RIFOr
+										|| head instanceof RIFExists
+										|| head instanceof RIFExternal
+										|| head instanceof RIFEqual){
+						valid = false;
+					}
+					
+					if (valid){
+						Collection<RIFRule> validRules = new HashSet<RIFRule>();
+						if (head instanceof RIFAnd){
+							for (RIFFormula h : (RIFAnd) head){
+								try {
+									validRules.addAll(constructValidRules(h, rule.getBody()));
+								} catch (InvalidRIFRuleException e) {
+									logger.info("Rule "+h.toString()+" :- "+rule.getBody().toString()+" is not a valid/necessary RIFCore rule.", e);
+								}
+							}
+						} else {
+							try {
+								validRules.addAll(constructValidRules(head, rule.getBody()));
+							} catch (InvalidRIFRuleException e) {
+								logger.info("Rule "+head.toString()+" :- "+rule.getBody().toString()+" is not a valid/necessary RIFCore rule.", e);
+							}
+						}
+						for (RIFRule r : validRules){
+							if (sentence instanceof RIFForAll) {
+								RIFForAll newSentence = new RIFForAll();
+								for (RIFVar var : ((RIFForAll) sentence).universalVars()){
+									newSentence.addUniversalVar(var);
+								}
+								newSentence.setStatement(r);
+								cleanRules.addSentence(newSentence);
+							} else {
+								cleanRules.addSentence(r);
+							}
+						}
+					}
+				} else {
+					cleanRules.addSentence(sentence);
+				}
+			}
+		}
+		
+		return cleanRules;
+	}
+	
+	private RIFFormula flattenFormula(RIFFormula formula){
+		if (formula instanceof RIFAnd){
+			RIFAnd flattenedFormula = new RIFAnd();
+			
+			for (RIFFormula subformula : (RIFAnd) formula){
+				flattenedFormula.addFormula(flattenFormula(subformula));
+			}
+			Iterator<RIFFormula> andList = flattenedFormula.iterator();
+			if (andList.hasNext()){
+				RIFFormula first = andList.next();
+				if (!andList.hasNext()){
+					return first;
+				}
+			}
+			return flattenedFormula;
+		} else if (formula instanceof RIFOr){
+			RIFOr flattenedFormula = new RIFOr();
+			
+			for (RIFFormula subformula : (RIFOr) formula){
+				flattenedFormula.addFormula(flattenFormula(subformula));
+			}
+			Iterator<RIFFormula> orList = flattenedFormula.iterator();
+			if (orList.hasNext()){
+				RIFFormula first = orList.next();
+				if (!orList.hasNext()){
+					return first;
+				}
+			}
+			return flattenedFormula;
+		} else if (formula instanceof RIFExists) {
+			((RIFExists) formula).addFormula(flattenFormula(((RIFExists) formula).getFormula()));
+		}
+		
+		return formula;
+	}
+	
+	private static class InvalidRIFRuleException extends Exception {
+		public InvalidRIFRuleException(){
+			super();
+		}
+		public InvalidRIFRuleException(String message){
+			super(message);
+		}
+	}
+	
+	private Collection<RIFRule> constructValidRules(RIFFormula head, RIFFormula body) throws InvalidRIFRuleException{
+		Collection<RIFRule> rules = new HashSet<RIFRule>();
+		
+		body = flattenFormula(body);
+		if (body instanceof RIFOr){
+			boolean valid = false;
+			Collection<InvalidRIFRuleException> exceptions = new HashSet<InvalidRIFRuleException>();
+			for (RIFFormula b : (RIFOr) body){
+				try {
+					rules.add(constructValidRule(head, b));
+					valid = true;
+				} catch (InvalidRIFRuleException e){
+					logger.info("Rule "+head.toString()+" :- "+b.toString()+" is not a valid/necessary RIFCore rule.", e);
+					exceptions.add(e);
+				}
+			}
+			if (!valid){
+				throw new InvalidRIFRuleException("body "+body.toString()+" contains only matches to head "+head.toString());
+			}
+		} else {
+			rules.add(constructValidRule(head, body));
+		}
 		
 		return rules;
 	}
 	
-	private RIFGroup compilePropertyDescriptions(RIFGroup ruleSet) {
-		// TODO
+	private RIFRule constructValidRule(RIFFormula head, RIFFormula body) throws InvalidRIFRuleException{
+		if (body instanceof RIFAnd){
+			body = flattenFormula((RIFAnd) body);
+			for (RIFFormula b : (RIFAnd) body){
+				if (b.equals(head)){
+					throw new InvalidRIFRuleException("body part "+b.toString()+" matches head "+head.toString());
+				}
+			}
+		} else {
+			if (body.equals(head)){
+				throw new InvalidRIFRuleException("body "+body.toString()+" matches head "+head.toString());
+			}
+		}
 		
-		return ruleSet;
+		RIFRule rule = new RIFRule();
+		rule.setHead(head);
+		rule.setBody(body);
+		
+		return rule;
 	}
 	
-	private RIFGroup compileIndividualDescriptions(RIFGroup ruleSet) {
-		// TODO
+	private RIFGroup compilePropertyDescriptions() {
+		RIFGroup propertyRules = new RIFGroup();
 		
-		return ruleSet;
+		//TODO
+		
+		return cleanRIFCoreRules(propertyRules);
+	}
+	
+	private RIFGroup compileIndividualDescriptions() {
+		RIFGroup individualRules = new RIFGroup();
+		
+		//TODO
+		
+		return cleanRIFCoreRules(individualRules);
 	}
 	
 }
@@ -295,14 +479,16 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		Collection<Element> classUnions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "unionOf");
 		Collection<Element> complementClasses = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "complementOf");
 		
-		Collection<Element> existentialRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "someValueFrom");
+		Collection<Element> existentialRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "someValuesFrom");
 		Collection<Element> universalRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "allValuesFrom");
 		Collection<Element> valueRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "hasValue");
 		
 		Collection<Element> cardinalityRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "cardinality");
+		Collection<Element> qualifiedCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "qualifiedCardinality");
 		Collection<Element> maxCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "maxCardinality");
 		Collection<Element> minCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "minCardinality");
 		Collection<Element> maxQualCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "maxQualifiedCardinality");
+		Collection<Element> minQualCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "minQualifiedCardinality");
 		
 		if (!classIntersections.isEmpty()){
 			rules = compileIntersections(rules, classIntersections);
@@ -316,14 +502,19 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 			rules = compileUniversalRestrictions(rules, universalRestrictions);
 		} else if (!valueRestrictions.isEmpty()){
 			rules = compileValueRestrictions(rules, valueRestrictions);
-		} else if (!cardinalityRestrictions.isEmpty()){
-			rules = compileCardinalityRestrictions(rules, cardinalityRestrictions);
+		// Not valid in OWL 2 RL because 
+//		} else if (!cardinalityRestrictions.isEmpty()){
+//			rules = compileCardinalityRestrictions(rules, cardinalityRestrictions);
+//		} else if (!qualifiedCardRestrictions.isEmpty()){
+//			rules = compileQualCardRestrictions(rules, qualifiedCardRestrictions);
 		} else if (!maxCardRestrictions.isEmpty()){
 			rules = compileMaxCardRestrictions(rules, maxCardRestrictions);
 		} else if (!minCardRestrictions.isEmpty()){
 			rules = compileMinCardRestrictions(rules, minCardRestrictions);
 		} else if (!maxQualCardRestrictions.isEmpty()){
 			rules = compileMaxQualCardRestrictions(rules, maxQualCardRestrictions);
+		} else if (!minQualCardRestrictions.isEmpty()){
+			rules = compileMinQualCardRestrictions(rules, minQualCardRestrictions);
 		}
 		
 		// Disjoint Classes
@@ -364,7 +555,7 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 			classes.addAll(getChildElementsByTagNameNS(equivClass, OWL_PREFIX, "Restriction"));
 			for (Element ec : classes){
 				OWLEquivalentClassCompiler scc = new OWLEquivalentClassCompiler(
-														ec, instance, subClassDescriptions, superClassDescriptions);
+														ec, instance, classMembership, subClassDescriptions, superClassDescriptions);
 				rules = scc.compile(rules);
 			}
 		} else {
@@ -381,7 +572,7 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 			Collection<Element> classes = getChildElementsByTagNameNS(superClass, OWL_PREFIX, "Class");
 			classes.addAll(getChildElementsByTagNameNS(superClass, OWL_PREFIX, "Restriction"));
 			for (Element sc : classes){
-				OWLSuperClassCompiler scc = new OWLSuperClassCompiler(sc, instance, subClassDescriptions);
+				OWLSuperClassCompiler scc = new OWLSuperClassCompiler(sc, instance, classMembership, subClassDescriptions, superClassDescriptions);
 				rules = scc.compile(rules);
 			}
 		} else {
@@ -476,7 +667,11 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 				complementPair.addFormula(complementClassMembership);
 				complementPair.addFormula(classMembership == null ? subClassDescriptions : classMembership);
 				
-				addRule(rules, new RIFError(), complementPair);
+				RIFExists exists = new RIFExists();
+				exists.addExistentialVar(instance);
+				exists.addFormula(complementPair);
+				
+				addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
 			}
 			if (complementClass.hasChildNodes()){
 				Collection<Element> classes = getChildElementsByTagNameNS(complementClass, OWL_PREFIX, "Class");
@@ -508,27 +703,27 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 					throw new RuntimeException("Property IRI " + propertyName + " is not a valid URI.", e);
 				}
 			} else {
-				Collection<Element> properties = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "ObjectProperty");
+				Collection<Element> properties = getChildElementsByTagNameNS(restrictedProperty, OWL_PREFIX, "ObjectProperty");
 				try {
 					return new OWLNamedPropertyCompiler(properties.iterator().next(), instance);
 				} catch (URISyntaxException e) {
 					return new OWLAnonymousPropertyCompiler(properties.iterator().next(), instance);
 				} catch (NoSuchElementException e) {}
-				properties = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "DatatypeProperty");
+				properties = getChildElementsByTagNameNS(restrictedProperty, OWL_PREFIX, "DatatypeProperty");
 				try {
 					return new OWLNamedPropertyCompiler(properties.iterator().next(), instance);
 				} catch (URISyntaxException e) {
 					return new OWLAnonymousPropertyCompiler(properties.iterator().next(), instance);
 				} catch (NoSuchElementException e) {}
-				properties = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "Description");
+				properties = getChildElementsByTagNameNS(restrictedProperty, RDF_PREFIX, "Description");
 				try {
 					return new OWLAnonymousPropertyCompiler(properties.iterator().next(), instance);
 				} catch (NoSuchElementException e) {
-					throw new RuntimeException("No property specified in Restriction " + (subClassDescriptions == null ? "at ontology root" : subClassDescriptions.toString()) + ".",e); 
+					throw new RuntimeException("No property specified in Restriction " + (classMembership == null ? (subClassDescriptions.iterator().hasNext() ? subClassDescriptions.toString() : "at ontology root") : classMembership.toString()) + ".",e); 
 				}
 			}
 		} catch (NoSuchElementException e) {
-			throw new RuntimeException("No property specified in Restriction " + (subClassDescriptions == null ? "at ontology root" : subClassDescriptions.toString()) + ".",e); 
+			throw new RuntimeException("No property specified in Restriction " + (classMembership == null ? (subClassDescriptions.iterator().hasNext() ? subClassDescriptions.toString() : "at ontology root") : classMembership.toString()) + ".",e); 
 		}
 	}
 
@@ -546,6 +741,7 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		
 		RIFAnd body = new RIFAnd();
 		restriction.addFormula(body);
+		restriction.addExistentialVar(object);
 		
 		RIFGroup subrules = new RIFGroup();
 		subrules = property.compile(subrules, object);
@@ -597,7 +793,6 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 				}
 			}
 			
-			restriction.addExistentialVar(object);
 			subClassDescriptions.addFormula(restriction);
 
 			return rules;
@@ -648,7 +843,7 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 			rules.addSentence(sentence);
 		}
 		
-		body.addFormula(subClassDescriptions);
+		body.addFormula(classMembership == null ? subClassDescriptions : classMembership);
 		RIFFormula head = new RIFAnd();
 		
 		for (Element range : universalRestrictions){
@@ -698,43 +893,51 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 				} catch (URISyntaxException e){
 					throw new RuntimeException("Value resource IRI " + rangeName + " is not a valid IRI.", e);
 				}
-			} else if (range.getChildNodes().item(0) == null){
+			} else if (range.getChildNodes().getLength() == 0){
 				throw new RuntimeException("Value restrictions must restrict to either a resource reference, a data value or an individual description.");
-			} else if (range.getChildNodes().item(0).getNodeType() == Node.TEXT_NODE) {
-				String rangeType = range.getAttributeNS(RDF_PREFIX, "datatype");
-				String rangeValue = range.getTextContent();
-				if (rangeType.length() > 0){
-					try {
-						object = new RIFXSDTypedConst(new URI(rangeType)).setData(rangeValue);
-					} catch (URISyntaxException e){
-						throw new RuntimeException("The datatype " + rangeType + " of value " + rangeValue + " is improperly formatted", e);
+			} else {
+				Collection<Element> childElements = new HashSet<Element>();
+				int i = 0;
+				while (i < range.getChildNodes().getLength()){
+					if (range.getChildNodes().item(i).getNodeType() == Node.ELEMENT_NODE){
+						childElements.add((Element)range.getChildNodes().item(i));
 					}
-				} else {
-					if (rangeValue.matches(".*\\^\\^.*")){
-						rangeType = rangeValue.substring(rangeValue.lastIndexOf('^') + 1);
+					i++;
+				}
+				if (childElements.iterator().hasNext()) {				
+					OWLIndividualCompiler erc = new OWLIndividualCompiler(childElements.iterator().next());
+					rules = erc.compile(rules);
+					
+					object = erc.getIndividualConst();
+				} else if (range.getTextContent().trim().length() > 0) {
+					String rangeType = range.getAttributeNS(RDF_PREFIX, "datatype");
+					String rangeValue = range.getTextContent();
+					if (rangeType.length() > 0){
 						try {
 							object = new RIFXSDTypedConst(new URI(rangeType)).setData(rangeValue);
 						} catch (URISyntaxException e){
-							throw new RuntimeException("The datatype of value " + rangeValue + " is improperly formatted", e);
+							throw new RuntimeException("The datatype " + rangeType + " of value " + rangeValue + " is improperly formatted", e);
 						}
-						rangeValue = rangeValue.substring(0, rangeValue.indexOf('^') - 1);
-					} else if (rangeValue.matches(".*@.*")) {
-						String rangeLocale = rangeValue.substring(rangeValue.lastIndexOf('@') + 1);
-						rangeValue = rangeValue.substring(0, rangeValue.lastIndexOf('@') - 1);
-						object = new RIFLocaleStringConst(rangeLocale).setData(rangeValue);
 					} else {
-						object = new RIFStringConst().setData(rangeValue);
+						if (rangeValue.matches(".*\\^\\^.*")){
+							rangeType = rangeValue.substring(rangeValue.lastIndexOf('^') + 1);
+							try {
+								object = new RIFXSDTypedConst(new URI(rangeType)).setData(rangeValue);
+							} catch (URISyntaxException e){
+								throw new RuntimeException("The datatype of value " + rangeValue + " is improperly formatted", e);
+							}
+							rangeValue = rangeValue.substring(0, rangeValue.indexOf('^') - 1);
+						} else if (rangeValue.matches(".*@.*")) {
+							String rangeLocale = rangeValue.substring(rangeValue.lastIndexOf('@') + 1);
+							rangeValue = rangeValue.substring(0, rangeValue.lastIndexOf('@') - 1);
+							object = new RIFLocaleStringConst(rangeLocale).setData(rangeValue);
+						} else {
+							object = new RIFStringConst().setData(rangeValue);
+						}
 					}
+				} else {
+					throw new RuntimeException("Value restrictions must restrict to either a resource reference, a data value or an individual description.");
 				}
-			} else if (range.getChildNodes().item(0).getNodeType() == Node.ELEMENT_NODE) {				
-				Element restrictionQualifier = (Element) range.getChildNodes().item(0);
-				
-				OWLIndividualCompiler erc = new OWLIndividualCompiler(restrictionQualifier);
-				rules = erc.compile(rules);
-				
-				object = erc.getIndividualConst();
-			} else {
-				throw new RuntimeException("Value restrictions must restrict to either a resource reference, a data value or an individual description.");
 			}
 		} else {
 			throw new RuntimeException("SHOULD NEVER HAPPEN (must have been value restrictions to have descended into this method).");
@@ -837,7 +1040,7 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		RIFVar object = new RIFVar().setName(objectVarName);
 		
 		RIFExists restriction = new RIFExists();
-		restriction.addExistentialVar(object);
+		restriction.addExistentialVar(instance);
 		
 		RIFAnd body = new RIFAnd();
 		restriction.addFormula(body);
@@ -870,18 +1073,21 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		}
 		
 		body.addFormula(classMembership == null ? subClassDescriptions : classMembership);
+		Collection<RIFVar> universalVars = new HashSet<RIFVar>();
 		
 		if (number == 0){
-			addRule(rules, new RIFError(), restriction);		
+			restriction.addExistentialVar(object);
+			addRule(rules, universalVars, new RIFError(), restriction);		
 		} else /*number == 1*/ {
+			universalVars.add(object);
+			
 			// create a property object var name not previously used in this descent of class descriptions by appending tilda until it no longer appears.
 			objectVarName += "~";
 			while (instance.getNode().getName().startsWith(objectVarName)){
 				objectVarName += "~";
 			}
 			RIFVar object2 = new RIFVar().setName(objectVarName);
-			
-			restriction.addExistentialVar(object2);
+			universalVars.add(object2);
 			
 			subrules = new RIFGroup();
 			subrules = property.compile(subrules, object2);
@@ -910,7 +1116,7 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 				rules.addSentence(sentence);
 			}
 			
-			addRule(rules, constructOWLSameAs(object, object2), restriction);
+			addRule(rules, universalVars, constructOWLSameAs(object, object2), restriction);
 		}
 
 		return rules;
@@ -949,6 +1155,37 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		return rules;
 	}
 	
+	private RIFGroup compileQualCardRestrictions(RIFGroup rules, Collection<Element> qualifiedCardRestrictions) {
+		int number = -1;
+		for (Element cardRestrict : qualifiedCardRestrictions){
+			if (cardRestrict.hasChildNodes()){
+				String numberString = cardRestrict.getTextContent();
+				try {
+					number = Integer.parseInt(numberString);
+				} catch (NumberFormatException e) {
+					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
+				}
+			}
+		}
+		
+		if (number < 0) {
+			throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
+		}
+		if (number == 1){
+			// Extract qualifying class identifiers/descriptive Elements
+			Collection<Element> qualifyingClasses = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "onClass");
+			
+			rules = compileExistentialRestrictions(rules, qualifyingClasses);
+			return compileMaxQualCardRestrictions(rules, qualifiedCardRestrictions);
+		}
+		if (number == 0) {
+			return compileMaxQualCardRestrictions(rules, qualifiedCardRestrictions);
+		}
+		
+		logger.info("Cardinality " + number + " restriction ignored in OWL 2 RL.");
+		return rules;
+	}
+	
 	private RIFGroup compileMaxQualCardRestrictions(RIFGroup rules, Collection<Element> maxQualCardRestrictions) {
 		int number = -1;
 		for (Element cardRestrict : maxQualCardRestrictions){
@@ -982,7 +1219,7 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		RIFVar object = new RIFVar().setName(objectVarName);
 		
 		RIFExists restriction = new RIFExists();
-		restriction.addExistentialVar(object);
+		restriction.addExistentialVar(instance);
 		
 		RIFAnd body = new RIFAnd();
 		restriction.addFormula(body);
@@ -1051,19 +1288,22 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		}
 		
 		body.addFormula(classMembership == null ? subClassDescriptions : classMembership);
+		Collection<RIFVar> universalVars = new HashSet<RIFVar>();
 		
 		if (number == 0){
 			// Add a rule to express that the body constructed thus far implies an error in the data/ontology
+			restriction.addExistentialVar(object);
 			addRule(rules, new RIFError(), restriction);		
 		} else /*number == 1*/ {
+			universalVars.add(object);
+			
 			// create a second property object var name not previously used in this descent of class descriptions by appending tilda to the existing property object var name, then repeatedly again until it no longer appears.
 			objectVarName += "~";
 			while (instance.getNode().getName().startsWith(objectVarName)){
 				objectVarName += "~";
 			}
 			RIFVar object2 = new RIFVar().setName(objectVarName);
-			
-			restriction.addExistentialVar(object2);
+			universalVars.add(object2);
 			
 			// compile the property again with the second property object
 			
@@ -1112,9 +1352,42 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 			}
 			
 			// add a rule specifying that when two individuals of the qualifying class are linked to the same instance by the given predicate, they must be the same individual. 
-			addRule(rules, constructOWLSameAs(object, object2), restriction);
+			addRule(rules, universalVars, constructOWLSameAs(object, object2), restriction);
 		}
 
+		return rules;
+	}
+	
+	private RIFGroup compileMinQualCardRestrictions(RIFGroup rules, Collection<Element> minQualCardRestrictions) {
+		int number = -1;
+		for (Element cardRestrict : minQualCardRestrictions){
+			if (cardRestrict.hasChildNodes()){
+				String numberString = cardRestrict.getTextContent();
+				try {
+					number = Integer.parseInt(numberString);
+				} catch (NumberFormatException e) {
+					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
+				}
+			}
+		}
+		
+		if (number < 0) {
+			throw new RuntimeException("Minimum Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
+		}
+		if (number == 0){
+			logger.info("Minimum Cardinality 0 restriction has no effect in OWL 2 RL.");
+			return rules;
+		}
+		if (number == 1){
+			// Extract qualifying class identifiers/descriptive Elements
+			Collection<Element> qualifyingClasses = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "onClass");
+			
+			return compileExistentialRestrictions(rules, qualifyingClasses);
+		}
+		
+		// Could do something clever with owl:differentFrom here, but it isn't in the OWL 2 RL rules specification.
+		
+		logger.info("Cardinality " + number + " restriction ignored in OWL 2 RL.");
 		return rules;
 	}
 	
@@ -1125,15 +1398,28 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 	}
 	
 	protected RIFGroup addRule(RIFGroup rules, RIFVar instance, RIFFormula head, RIFFormula body){
-		RIFForAll forall = new RIFForAll();
-		forall.addUniversalVar(instance);
+		Collection<RIFVar> universalVars = new HashSet<RIFVar>();
+		universalVars.add(instance);
 		
+		return addRule(rules, universalVars, head, body);
+	}
+	
+	protected RIFGroup addRule(RIFGroup rules, Collection<RIFVar> instances, RIFFormula head, RIFFormula body){
 		RIFRule rule = new RIFRule();
 		rule.setHead(head);
 		rule.setBody(body);
-		forall.setStatement(rule);
 		
-		rules.addSentence(forall);
+		if (instances.isEmpty()){
+			rules.addSentence(rule);
+		} else {
+			RIFForAll forall = new RIFForAll();
+			for (RIFVar var : instances){
+				forall.addUniversalVar(var);
+			}
+			forall.setStatement(rule);
+			
+			rules.addSentence(forall);
+		}
 		return rules;
 	}
 	
@@ -1143,12 +1429,16 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 
 class OWLEquivalentClassCompiler extends OWLClassCompiler {
 
-	public OWLEquivalentClassCompiler(Element clazz, RIFVar instance, RIFOr inheritedSubClass, RIFAnd inheritedSuperClass) {
+	public OWLEquivalentClassCompiler(Element clazz, RIFVar instance, RIFMember equivalentClassMembership, RIFOr inheritedSubClass, RIFAnd inheritedSuperClass) {
 		super(clazz, instance);
 		
 		if (classMembership == null){
-			subClassDescriptions.addFormula(inheritedSubClass);
-			superClassDescriptions.addFormula(inheritedSuperClass);
+			if (equivalentClassMembership == null){
+				subClassDescriptions.addFormula(inheritedSubClass);
+				superClassDescriptions.addFormula(inheritedSuperClass);
+			} else {
+				classMembership = equivalentClassMembership;
+			}
 		} else {
 			inheritedSubClass.addFormula(classMembership);
 			inheritedSuperClass.addFormula(classMembership);
@@ -1164,13 +1454,17 @@ class OWLEquivalentClassCompiler extends OWLClassCompiler {
 
 class OWLSuperClassCompiler extends OWLClassCompiler {
 
-	public OWLSuperClassCompiler(Element clazz, RIFVar instance, RIFOr subClassDescription) {
+	public OWLSuperClassCompiler(Element clazz, RIFVar instance, RIFMember subClassMembership, RIFOr subClassDescription, RIFAnd subClassImplications) {
 		super(clazz, instance);
 		
 		if (classMembership == null){
-			this.subClassDescriptions.addFormula(subClassDescription);
+			if (subClassMembership == null){
+				this.subClassDescriptions.addFormula(subClassDescription);
+			} else {
+				this.subClassDescriptions.addFormula(subClassMembership);
+			}
 		} else {
-			subClassDescription.addFormula(classMembership);
+			subClassImplications.addFormula(classMembership);
 		}
 	}
 	
@@ -1359,6 +1653,7 @@ class OWLComplementClassCompiler extends OWLClassCompiler {
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
+		
 		RIFGroup subrules;
 		if (anonymous){
 			subrules = new RIFGroup();
@@ -1368,7 +1663,11 @@ class OWLComplementClassCompiler extends OWLClassCompiler {
 			complementPair.addFormula(classMembership);
 			complementPair.addFormula(complementClassDescription);
 			
-			addRule(rules, new RIFError(), complementPair);
+			RIFExists exists = new RIFExists();
+			exists.addExistentialVar(instance);
+			exists.addFormula(complementPair);
+			
+			addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
 		}
 		
 		subrules = this.compileProper(subrules);
@@ -1391,7 +1690,11 @@ class OWLComplementClassCompiler extends OWLClassCompiler {
 						complementPair.addFormula(rule.getBody());
 						complementPair.addFormula(complementClassDescription);
 						
-						addRule(rules, new RIFError(), complementPair);
+						RIFExists exists = new RIFExists();
+						exists.addExistentialVar(instance);
+						exists.addFormula(complementPair);
+						
+						addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
 						continue;
 					}
 					// membership of this class implies nothing specific 
@@ -1556,14 +1859,16 @@ abstract class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 		this.property = property;
 		this.subject = subject;
 		
-		String propertyName = property.getAttributeNS(RDF_PREFIX, "about");
-		if (propertyName.length() > 0){
-			try {
-				URI propertyURI = new URI(propertyName);
-				propertyIRI = new RIFIRIConst();
-				propertyIRI.setData(propertyURI);
-			} catch (URISyntaxException e) {
-				throw new RuntimeException("Property IRI " + propertyName + " is not a valid URI.", e);
+		if (property != null){
+			String propertyName = property.getAttributeNS(RDF_PREFIX, "about");
+			if (propertyName.length() > 0){
+				try {
+					URI propertyURI = new URI(propertyName);
+					propertyIRI = new RIFIRIConst();
+					propertyIRI.setData(propertyURI);
+				} catch (URISyntaxException e) {
+					throw new RuntimeException("Property IRI " + propertyName + " is not a valid URI.", e);
+				}
 			}
 		}
 	}
