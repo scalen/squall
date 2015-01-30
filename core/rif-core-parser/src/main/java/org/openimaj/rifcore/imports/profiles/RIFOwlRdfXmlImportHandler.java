@@ -169,8 +169,7 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 				throw new Error("Missing RDF element in RDF/XML ontology specification");
 			}
 		} catch (ParserConfigurationException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			throw new RuntimeException("SHOULD NOT HAPPEN, parser configured staticly.", e);
 		}
 	}
 	
