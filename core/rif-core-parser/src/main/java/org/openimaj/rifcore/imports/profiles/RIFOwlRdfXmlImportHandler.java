@@ -93,7 +93,7 @@ abstract class OWLTranslater <IO> {
 	
 	public abstract IO compile (IO io);
 	
-	protected RIFMember constructRIFMemeber(RIFVar instance, String className){
+	protected RIFMember constructRIFMemeber(RIFDatum object, String className){
 		try {
 			URI classURI = new URI(className);
 			
@@ -101,7 +101,7 @@ abstract class OWLTranslater <IO> {
 			classIRI.setData(classURI);
 			
 			RIFMember typeStatement = new RIFMember();
-			typeStatement.setInstance(instance);
+			typeStatement.setInstance(object);
 			typeStatement.setInClass(classIRI);
 			
 			return typeStatement;
@@ -145,6 +145,26 @@ abstract class OWLTranslater <IO> {
 		
 		return result;
 	}
+
+ 	protected RIFGroup addRule(RIFGroup rules, Collection<RIFVar> instances, RIFFormula head, RIFFormula body){
+		RIFRule rule = new RIFRule();
+		rule.setHead(head);
+		rule.setBody(body);
+		
+		if (instances.isEmpty()){
+			rules.addSentence(rule);
+		} else {
+			RIFForAll forall = new RIFForAll();
+			for (RIFVar var : instances){
+				forall.addUniversalVar(var);
+			}
+			forall.setStatement(rule);
+			
+			rules.addSentence(forall);
+		}
+		return rules;
+	}
+
 }
 
 class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
@@ -482,8 +502,8 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		Collection<Element> universalRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "allValuesFrom");
 		Collection<Element> valueRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "hasValue");
 		
-		Collection<Element> cardinalityRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "cardinality");
-		Collection<Element> qualifiedCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "qualifiedCardinality");
+//		Collection<Element> cardinalityRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "cardinality");
+//		Collection<Element> qualifiedCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "qualifiedCardinality");
 		Collection<Element> maxCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "maxCardinality");
 		Collection<Element> minCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "minCardinality");
 		Collection<Element> maxQualCardRestrictions = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "maxQualifiedCardinality");
@@ -977,36 +997,36 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		return rules;
 	}
 	
-	private RIFGroup compileCardinalityRestrictions(RIFGroup rules, Collection<Element> cardinalityRestrictions) {
-		int number = -1;
-		for (Element cardRestrict : cardinalityRestrictions){
-			if (cardRestrict.hasChildNodes()){
-				String numberString = cardRestrict.getTextContent();
-				try {
-					number = Integer.parseInt(numberString);
-				} catch (NumberFormatException e) {
-					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
-				}
-			}
-		}
-		
-		if (number < 0) {
-			throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
-		}
-		if (number == 1){
-			for (Element cardRestrict : cardinalityRestrictions){
-				cardRestrict.setAttributeNS(RDF_PREFIX, "resource", OWL_PREFIX + "Thing");
-			}
-			rules = compileExistentialRestrictions(rules, cardinalityRestrictions);
-			return compileMaxCardRestrictions(rules, cardinalityRestrictions);
-		}
-		if (number == 0) {
-			return compileMaxCardRestrictions(rules, cardinalityRestrictions);
-		}
-		
-		logger.info("Cardinality " + number + " restriction ignored in OWL 2 RL.");
-		return rules;
-	}
+//	private RIFGroup compileCardinalityRestrictions(RIFGroup rules, Collection<Element> cardinalityRestrictions) {
+//		int number = -1;
+//		for (Element cardRestrict : cardinalityRestrictions){
+//			if (cardRestrict.hasChildNodes()){
+//				String numberString = cardRestrict.getTextContent();
+//				try {
+//					number = Integer.parseInt(numberString);
+//				} catch (NumberFormatException e) {
+//					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
+//				}
+//			}
+//		}
+//		
+//		if (number < 0) {
+//			throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
+//		}
+//		if (number == 1){
+//			for (Element cardRestrict : cardinalityRestrictions){
+//				cardRestrict.setAttributeNS(RDF_PREFIX, "resource", OWL_PREFIX + "Thing");
+//			}
+//			rules = compileExistentialRestrictions(rules, cardinalityRestrictions);
+//			return compileMaxCardRestrictions(rules, cardinalityRestrictions);
+//		}
+//		if (number == 0) {
+//			return compileMaxCardRestrictions(rules, cardinalityRestrictions);
+//		}
+//		
+//		logger.info("Cardinality " + number + " restriction ignored in OWL 2 RL.");
+//		return rules;
+//	}
 	
 	private RIFGroup compileMaxCardRestrictions(RIFGroup rules, Collection<Element> maxCardRestrictions) {
 		int number = -1;
@@ -1154,36 +1174,36 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		return rules;
 	}
 	
-	private RIFGroup compileQualCardRestrictions(RIFGroup rules, Collection<Element> qualifiedCardRestrictions) {
-		int number = -1;
-		for (Element cardRestrict : qualifiedCardRestrictions){
-			if (cardRestrict.hasChildNodes()){
-				String numberString = cardRestrict.getTextContent();
-				try {
-					number = Integer.parseInt(numberString);
-				} catch (NumberFormatException e) {
-					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
-				}
-			}
-		}
-		
-		if (number < 0) {
-			throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
-		}
-		if (number == 1){
-			// Extract qualifying class identifiers/descriptive Elements
-			Collection<Element> qualifyingClasses = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "onClass");
-			
-			rules = compileExistentialRestrictions(rules, qualifyingClasses);
-			return compileMaxQualCardRestrictions(rules, qualifiedCardRestrictions);
-		}
-		if (number == 0) {
-			return compileMaxQualCardRestrictions(rules, qualifiedCardRestrictions);
-		}
-		
-		logger.info("Cardinality " + number + " restriction ignored in OWL 2 RL.");
-		return rules;
-	}
+//	private RIFGroup compileQualCardRestrictions(RIFGroup rules, Collection<Element> qualifiedCardRestrictions) {
+//		int number = -1;
+//		for (Element cardRestrict : qualifiedCardRestrictions){
+//			if (cardRestrict.hasChildNodes()){
+//				String numberString = cardRestrict.getTextContent();
+//				try {
+//					number = Integer.parseInt(numberString);
+//				} catch (NumberFormatException e) {
+//					throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + numberString, e);
+//				}
+//			}
+//		}
+//		
+//		if (number < 0) {
+//			throw new RuntimeException("Cardinality Restrictions must be restricted to a non-negative integer value, not " + number);
+//		}
+//		if (number == 1){
+//			// Extract qualifying class identifiers/descriptive Elements
+//			Collection<Element> qualifyingClasses = getChildElementsByTagNameNS(clazz, OWL_PREFIX, "onClass");
+//			
+//			rules = compileExistentialRestrictions(rules, qualifyingClasses);
+//			return compileMaxQualCardRestrictions(rules, qualifiedCardRestrictions);
+//		}
+//		if (number == 0) {
+//			return compileMaxQualCardRestrictions(rules, qualifiedCardRestrictions);
+//		}
+//		
+//		logger.info("Cardinality " + number + " restriction ignored in OWL 2 RL.");
+//		return rules;
+//	}
 	
 	private RIFGroup compileMaxQualCardRestrictions(RIFGroup rules, Collection<Element> maxQualCardRestrictions) {
 		int number = -1;
@@ -1401,25 +1421,6 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		universalVars.add(instance);
 		
 		return addRule(rules, universalVars, head, body);
-	}
-	
-	protected RIFGroup addRule(RIFGroup rules, Collection<RIFVar> instances, RIFFormula head, RIFFormula body){
-		RIFRule rule = new RIFRule();
-		rule.setHead(head);
-		rule.setBody(body);
-		
-		if (instances.isEmpty()){
-			rules.addSentence(rule);
-		} else {
-			RIFForAll forall = new RIFForAll();
-			for (RIFVar var : instances){
-				forall.addUniversalVar(var);
-			}
-			forall.setStatement(rule);
-			
-			rules.addSentence(forall);
-		}
-		return rules;
 	}
 	
 }
@@ -1894,19 +1895,13 @@ abstract class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 	}
 	
 	protected RIFGroup addRule(RIFGroup rules, RIFFormula head, RIFFormula body){
-		RIFForAll forall = new RIFForAll();
-		forall.addUniversalVar(subject);
+		Collection<RIFVar> universalVars = new HashSet<RIFVar>();
+		universalVars.add(subject);
 		if (object instanceof RIFVar){
-			forall.addUniversalVar((RIFVar) object);
+			universalVars.add((RIFVar) object);
 		}
 		
-		RIFRule rule = new RIFRule();
-		rule.setHead(head);
-		rule.setBody(body);
-		forall.setStatement(rule);
-		
-		rules.addSentence(forall);
-		return rules;
+		return addRule(rules, universalVars, head, body);
 	}
 	
 }
@@ -1987,7 +1982,34 @@ class OWLNamedPropertyCompiler extends OWLPropertyCompiler {
 
 	@Override
 	protected RIFGroup compileProper(RIFGroup rules) {
-		// TODO Auto-generated method stub
+		// Property domain declarations
+		Collection<Element> equivalentClasses = getChildElementsByTagNameNS(property, RDFS_PREFIX, "range");
+		for (Element range : equivalentClasses){
+			String rangeName = range.getAttributeNS(RDF_PREFIX, "resource");
+			if (rangeName.length() > 0){
+				RIFMember head = constructRIFMemeber(object, rangeName);
+				Collection<RIFVar> uvs = new HashSet<RIFVar>();
+				if (object instanceof RIFVar){
+					uvs.add((RIFVar) object);
+				}
+					
+				// construct body of the rule describing membership of this relation
+				RIFFrame frame = new RIFFrame();
+				frame.setSubject(subject);
+				frame.setPredicate(propertyIRI);
+				frame.setObject(object);
+				
+				RIFExists exists = new RIFExists();
+				exists.addExistentialVar(subject);
+				exists.addFormula(frame);
+				
+				this.addRule(rules, uvs, head, exists);
+			} else if () {
+				
+			} else {
+				throw new RuntimeException("Range statements need an object by which to classify the range of a property");
+			}
+		}
 		return rules;
 	}
 	

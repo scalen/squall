@@ -1,12 +1,13 @@
 package org.openimaj.rifcore.conditions.formula;
 
 import org.openimaj.rifcore.conditions.data.RIFDatum;
+import org.openimaj.rifcore.rules.RIFStatement;
 
 /**
  * @author david.monks
  *
  */
-public class RIFMember implements RIFFormula {
+public class RIFMember extends RIFStatement implements RIFFormula {
 	
 	private RIFDatum instance;
 	private RIFDatum inClass;
