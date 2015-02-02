@@ -2008,6 +2008,103 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 			rules = compileDomainRestrictions(rules, propertyMembership, propertyDescription, domains);
 		}
 		Collection<Element> types = getChildElementsByTagNameNS(property, RDF_PREFIX, "type");
+		if (!types.isEmpty()){
+			// TODO check if typed anonymous properties are valid OWL 2 RL
+			rules = compileTypeStatements(rules, propertyMembership, types);
+		}
+		
+		return rules;
+	}
+
+	private RIFGroup compileRangeRestrictions(RIFGroup rules, RIFFrame propertyMembership, RIFAnd propertyDescription, Collection<Element> ranges) {
+		for (Element range : ranges){
+			String rangeName = range.getAttributeNS(RDF_PREFIX, "resource");
+			RIFAnd head = new RIFAnd();
+			if (rangeName.length() > 0){
+				head.addFormula(constructRIFMemeber(object, rangeName));
+			} else if (range.hasChildNodes()) {
+				Collection<Element> rangeQualifiers = getChildElementsByTagNameNS(range, OWL_PREFIX, "Class");
+				rangeQualifiers.addAll(getChildElementsByTagNameNS(range, OWL_PREFIX, "Restriction"));
+				if (!rangeQualifiers.isEmpty()){
+					try{ 
+						Element restrictionQualifier = rangeQualifiers.iterator().next();
+						OWLUniversalRangeCompiler erc = new OWLUniversalRangeCompiler(
+																		restrictionQualifier,
+																		object,
+																		(RIFAnd) head);
+						rules = erc.compile(rules);
+					} catch (NoSuchElementException e) {
+						throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".",e); 
+					}
+				}
+			} else {
+				throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
+			}
+			
+			Collection<RIFVar> uvs = new HashSet<RIFVar>();
+			if (object instanceof RIFVar){
+				uvs.add((RIFVar) object);
+			}
+			
+			if (subject instanceof RIFVar) {
+				RIFExists exists = new RIFExists();
+				exists.addExistentialVar((RIFVar) subject);
+				exists.addFormula(propertyMembership == null ? propertyDescription : propertyMembership);
+				
+				addRule(rules, uvs, head, exists);
+			} else {
+				addRule(rules, uvs, head, propertyMembership == null ? propertyDescription : propertyMembership);
+			}
+			
+		}
+		return rules;
+	}
+	
+	private RIFGroup compileDomainRestrictions(RIFGroup rules, RIFFrame propertyMembership, RIFAnd propertyDescription, Collection<Element> domains) {
+		for (Element domain : domains){
+			String domainName = domain.getAttributeNS(RDF_PREFIX, "resource");
+			RIFAnd head = new RIFAnd();
+			if (domainName.length() > 0){
+				head.addFormula(constructRIFMemeber(subject, domainName));
+			} else if (domain.hasChildNodes()) {
+				Collection<Element> domainQualifiers = getChildElementsByTagNameNS(domain, OWL_PREFIX, "Class");
+				domainQualifiers.addAll(getChildElementsByTagNameNS(domain, OWL_PREFIX, "Restriction"));
+				if (!domainQualifiers.isEmpty()){
+					try{ 
+						Element restrictionQualifier = domainQualifiers.iterator().next();
+						OWLUniversalRangeCompiler erc = new OWLUniversalRangeCompiler(
+																		restrictionQualifier,
+																		subject,
+																		(RIFAnd) head);
+						rules = erc.compile(rules);
+					} catch (NoSuchElementException e) {
+						throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".",e); 
+					}
+				}
+			} else {
+				throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
+			}
+			
+			Collection<RIFVar> uvs = new HashSet<RIFVar>();
+			if (subject instanceof RIFVar){
+				uvs.add((RIFVar) subject);
+			}
+			
+			if (subject instanceof RIFVar) {
+				RIFExists exists = new RIFExists();
+				exists.addExistentialVar((RIFVar) object);
+				exists.addFormula(propertyMembership == null ? propertyDescription : propertyMembership);
+				
+				addRule(rules, uvs, head, exists);
+			} else {
+				addRule(rules, uvs, head, propertyMembership == null ? propertyDescription : propertyMembership);
+			}
+			
+		}
+		return rules;
+	}
+	
+	private RIFGroup compileTypeStatements(RIFGroup rules, RIFFrame propertyMembership, Collection<Element> types){
 		for (Element type : types){
 			String typeName = type.getAttributeNS(RDF_PREFIX, "resource");
 			if (typeName.length() > 0){
@@ -2165,95 +2262,6 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 					throw new RuntimeException("Property type " + typeName + "is not a valid type for a property in OWL 2 RL.");
 				}
 			}
-		}
-		
-		return rules;
-	}
-
-	private RIFGroup compileRangeRestrictions(RIFGroup rules, RIFFrame propertyMembership, RIFAnd propertyDescription, Collection<Element> ranges) {
-		for (Element range : ranges){
-			String rangeName = range.getAttributeNS(RDF_PREFIX, "resource");
-			RIFAnd head = new RIFAnd();
-			if (rangeName.length() > 0){
-				head.addFormula(constructRIFMemeber(object, rangeName));
-			} else if (range.hasChildNodes()) {
-				Collection<Element> rangeQualifiers = getChildElementsByTagNameNS(range, OWL_PREFIX, "Class");
-				rangeQualifiers.addAll(getChildElementsByTagNameNS(range, OWL_PREFIX, "Restriction"));
-				if (!rangeQualifiers.isEmpty()){
-					try{ 
-						Element restrictionQualifier = rangeQualifiers.iterator().next();
-						OWLUniversalRangeCompiler erc = new OWLUniversalRangeCompiler(
-																		restrictionQualifier,
-																		object,
-																		(RIFAnd) head);
-						rules = erc.compile(rules);
-					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".",e); 
-					}
-				}
-			} else {
-				throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
-			}
-			
-			Collection<RIFVar> uvs = new HashSet<RIFVar>();
-			if (object instanceof RIFVar){
-				uvs.add((RIFVar) object);
-			}
-			
-			if (subject instanceof RIFVar) {
-				RIFExists exists = new RIFExists();
-				exists.addExistentialVar((RIFVar) subject);
-				exists.addFormula(propertyMembership == null ? propertyDescription : propertyMembership);
-				
-				addRule(rules, uvs, head, exists);
-			} else {
-				addRule(rules, uvs, head, propertyMembership == null ? propertyDescription : propertyMembership);
-			}
-			
-		}
-		return rules;
-	}
-	
-	private RIFGroup compileDomainRestrictions(RIFGroup rules, RIFFrame propertyMembership, RIFAnd propertyDescription, Collection<Element> domains) {
-		for (Element domain : domains){
-			String domainName = domain.getAttributeNS(RDF_PREFIX, "resource");
-			RIFAnd head = new RIFAnd();
-			if (domainName.length() > 0){
-				head.addFormula(constructRIFMemeber(subject, domainName));
-			} else if (domain.hasChildNodes()) {
-				Collection<Element> domainQualifiers = getChildElementsByTagNameNS(domain, OWL_PREFIX, "Class");
-				domainQualifiers.addAll(getChildElementsByTagNameNS(domain, OWL_PREFIX, "Restriction"));
-				if (!domainQualifiers.isEmpty()){
-					try{ 
-						Element restrictionQualifier = domainQualifiers.iterator().next();
-						OWLUniversalRangeCompiler erc = new OWLUniversalRangeCompiler(
-																		restrictionQualifier,
-																		subject,
-																		(RIFAnd) head);
-						rules = erc.compile(rules);
-					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".",e); 
-					}
-				}
-			} else {
-				throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
-			}
-			
-			Collection<RIFVar> uvs = new HashSet<RIFVar>();
-			if (subject instanceof RIFVar){
-				uvs.add((RIFVar) subject);
-			}
-			
-			if (subject instanceof RIFVar) {
-				RIFExists exists = new RIFExists();
-				exists.addExistentialVar((RIFVar) object);
-				exists.addFormula(propertyMembership == null ? propertyDescription : propertyMembership);
-				
-				addRule(rules, uvs, head, exists);
-			} else {
-				addRule(rules, uvs, head, propertyMembership == null ? propertyDescription : propertyMembership);
-			}
-			
 		}
 		return rules;
 	}
