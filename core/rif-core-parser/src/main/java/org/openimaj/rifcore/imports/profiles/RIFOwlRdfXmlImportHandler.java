@@ -1877,14 +1877,10 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 	protected final RIFDatum subject;
 	protected RIFIRIConst propertyIRI = null;
 	protected RIFDatum object = null;
-
-	private final RIFOr propertyDescription;
 	
 	public OWLPropertyCompiler(Element property, RIFDatum subject){
 		this.property = property;
 		this.subject = subject;
-		
-		propertyDescription = new RIFOr();
 		
 		if (property != null){
 			String propertyName = property.getAttributeNS(RDF_PREFIX, "about");
@@ -1915,7 +1911,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 	
 	public RIFFormula getPropertyDescription(RIFDatum object){
 		if (propertyIRI == null){
-			return this.propertyDescription;
+			return this.subPropertyDescription;
 		}
 		
 		return getPropertyMembership(object);
@@ -2019,7 +2015,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 					i++;
 				}
 				
-				propertyDescription.addFormula(body);
+				subPropertyDescription.addFormula(body);
 			}
 		}
 		
@@ -2044,11 +2040,11 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 																		(RIFAnd) head);
 						rules = erc.compile(rules);
 					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".",e); 
+						throw new RuntimeException("No range specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".",e); 
 					}
 				}
 			} else {
-				throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
+				throw new RuntimeException("No range specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".");
 			}
 			
 			superPropertyDescription.addFormula(head);
@@ -2074,11 +2070,11 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 																		(RIFAnd) head);
 						rules = erc.compile(rules);
 					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No domain specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".",e); 
+						throw new RuntimeException("No domain specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".",e); 
 					}
 				}
 			} else {
-				throw new RuntimeException("No domain specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
+				throw new RuntimeException("No domain specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".");
 			}
 			
 			superPropertyDescription.addFormula(head);
@@ -2249,7 +2245,6 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 	}
 	
 	private RIFGroup compileEquivalentProperties(RIFGroup rules, RIFFrame propertyMembership, Collection<Element> equivalents, boolean inverse, boolean subProperty) {
-		// TODO make use of sub/super property descriptions instead of making rules here
 		for (Element equiv : equivalents){
 			String equivName = equiv.getAttributeNS(RDF_PREFIX, "resource");
 			RIFAnd head = new RIFAnd();
@@ -2285,11 +2280,11 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 						rules = erc.compile(rules);
 						head.addFormula(erc.getPropertyDescription());
 					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".",e); 
+						throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".",e); 
 					}
 				}
 			} else {
-				throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
+				throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".");
 			}
 			
 			Collection<RIFVar> uvs = new HashSet<RIFVar>();
@@ -2332,14 +2327,14 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 						rules = erc.compile(rules);
 						body.addFormula(erc.getPropertyDescription());
 					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".",e); 
+						throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".",e); 
 					}
 				}
 			} else {
-				throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
+				throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".");
 			}
 			
-			body.addFormula(propertyMembership == null ? propertyDescription : propertyMembership);
+			body.addFormula(propertyMembership == null ? subPropertyDescription : propertyMembership);
 			
 			RIFExists exists = new RIFExists();
 			if (subject instanceof RIFVar){
