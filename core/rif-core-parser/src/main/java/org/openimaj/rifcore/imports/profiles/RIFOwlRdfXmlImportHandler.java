@@ -2022,7 +2022,6 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 				propertyDescription.addFormula(body);
 			}
 		}
-		// TODO property chains
 		
 		return rules;
 	}
