@@ -2052,21 +2052,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 				throw new RuntimeException("No range specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
 			}
 			
-			Collection<RIFVar> uvs = new HashSet<RIFVar>();
-			if (object instanceof RIFVar){
-				uvs.add((RIFVar) object);
-			}
-			
-			if (subject instanceof RIFVar) {
-				RIFExists exists = new RIFExists();
-				exists.addExistentialVar((RIFVar) subject);
-				exists.addFormula(propertyMembership == null ? propertyDescription : propertyMembership);
-				
-				addRule(rules, uvs, head, exists);
-			} else {
-				addRule(rules, uvs, head, propertyMembership == null ? propertyDescription : propertyMembership);
-			}
-			
+			superPropertyDescription.addFormula(head);
 		}
 		return rules;
 	}
@@ -2096,21 +2082,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 				throw new RuntimeException("No domain specified for property " + (propertyMembership == null ? propertyDescription : propertyMembership) + ".");
 			}
 			
-			Collection<RIFVar> uvs = new HashSet<RIFVar>();
-			if (subject instanceof RIFVar){
-				uvs.add((RIFVar) subject);
-			}
-			
-			if (object instanceof RIFVar) {
-				RIFExists exists = new RIFExists();
-				exists.addExistentialVar((RIFVar) object);
-				exists.addFormula(propertyMembership == null ? propertyDescription : propertyMembership);
-				
-				addRule(rules, uvs, head, exists);
-			} else {
-				addRule(rules, uvs, head, propertyMembership == null ? propertyDescription : propertyMembership);
-			}
-			
+			superPropertyDescription.addFormula(head);
 		}
 		return rules;
 	}
@@ -2202,7 +2174,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 					body.setPredicate(propertyIRI);
 					body.setObject(subject);
 					
-					rules = addRule(rules, propertyMembership, body);
+					subPropertyDescription.addFormula(body);
 				} else if (typeName.equals("http://www.w3.org/2002/07/owl#AsymmetricProperty")){
 					if (propertyMembership == null) {
 						// TODO check
@@ -2329,9 +2301,9 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 				uvs.add((RIFVar) object);
 			}
 			
-			addRule(rules, uvs, head, propertyMembership == null ? propertyDescription : propertyMembership);
+			superPropertyDescription.addFormula(head);
 			if (subProperty){
-				addRule(rules, uvs, propertyMembership == null ? propertyDescription : propertyMembership, head);
+				subPropertyDescription.addFormula(head);
 			}
 		}
 		return rules;
