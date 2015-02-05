@@ -33,6 +33,30 @@
     <!-- http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#bar -->
 
     <owl:ObjectProperty rdf:about="http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#bar"/>
+    <rdf:Description>
+        <rdfs:range rdf:resource="http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#bang"/>
+        <owl:inverseOf rdf:resource="http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#bar"/>
+    </rdf:Description>
+    
+
+
+    <!-- http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#boing -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#boing">
+        <owl:propertyChainAxiom rdf:parseType="Collection">
+            <rdf:Description rdf:about="http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#bar"/>
+            <rdf:Description rdf:about="http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#snarl"/>
+            <rdf:Description rdf:about="http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#bar"/>
+        </owl:propertyChainAxiom>
+    </owl:ObjectProperty>
+    
+
+
+    <!-- http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#snarl -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/david.monks/ontologies/2015/0/Test.owl#snarl">
+        <rdf:type rdf:resource="&owl;TransitiveProperty"/>
+    </owl:ObjectProperty>
     
 
 

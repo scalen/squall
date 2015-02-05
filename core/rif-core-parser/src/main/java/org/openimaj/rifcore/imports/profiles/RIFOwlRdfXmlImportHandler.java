@@ -16,6 +16,7 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
+import org.apache.log4j.Category;
 import org.apache.log4j.Logger;
 import org.openimaj.rifcore.RIFRuleSet;
 import org.openimaj.rifcore.conditions.RIFExternal;
@@ -37,6 +38,7 @@ import org.openimaj.rifcore.conditions.formula.RIFExists;
 import org.openimaj.rifcore.conditions.formula.RIFFormula;
 import org.openimaj.rifcore.conditions.formula.RIFMember;
 import org.openimaj.rifcore.conditions.formula.RIFOr;
+import org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException;
 import org.openimaj.rifcore.rules.RIFForAll;
 import org.openimaj.rifcore.rules.RIFGroup;
 import org.openimaj.rifcore.rules.RIFRule;
@@ -158,22 +160,23 @@ abstract class OWLTranslater <IO> {
 		return result;
 	}
 
- 	protected RIFGroup addRule(RIFGroup rules, Collection<RIFVar> instances, RIFFormula head, RIFFormula body){
-		RIFRule rule = new RIFRule();
-		rule.setHead(head);
-		rule.setBody(body);
+ 	protected RIFGroup addRule(RIFGroup rules, Collection<RIFVar> instances, RIFFormula head, RIFFormula body) throws InvalidRIFRuleException{
+ 		Collection<RIFRule> validRules = constructValidRules(head, body);
 		
-		if (instances.isEmpty()){
-			rules.addSentence(rule);
-		} else {
-			RIFForAll forall = new RIFForAll();
-			for (RIFVar var : instances){
-				forall.addUniversalVar(var);
+		for (RIFRule r : validRules){			
+			if (instances.isEmpty()){
+				rules.addSentence(r);
+			} else {
+				RIFForAll forall = new RIFForAll();
+				for (RIFVar var : instances){
+					forall.addUniversalVar(var);
+				}
+				forall.setStatement(r);
+				
+				rules.addSentence(forall);
 			}
-			forall.setStatement(rule);
-			
-			rules.addSentence(forall);
 		}
+		
 		return rules;
 	}
  	
@@ -502,7 +505,13 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 	private RIFGroup compilePropertyDescriptions() {
 		RIFGroup propertyRules = new RIFGroup();
 		
-		//TODO
+		Collection<Element> properties = getChildElementsByTagNameNS(rdf, OWL_PREFIX, "ObjectProperty");
+		properties.addAll(getChildElementsByTagNameNS(rdf, OWL_PREFIX, "DatatypeProperty"));
+		for (Element c :properties){
+			RIFVar instance = new RIFVar().setName("instance");
+			OWLPropertyCompiler cc = new OWLPropertyCompiler(c, instance);
+			propertyRules = cc.compile(propertyRules);
+		}
 		
 		return cleanRIFCoreRules(propertyRules);
 	}
@@ -542,7 +551,52 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
-		return this.compileProper(rules);
+		return resolveSubAndSuperClassDescriptions(compileProper(rules));
+	}
+	
+	protected RIFGroup resolveSubAndSuperClassDescriptions(RIFGroup rules) {
+		// After establishing the class description and the hierarchy directly above and below the class, express subsumption rules concerning the class
+		// If anonymous, all subclasses imply all superclasses...
+		if (classMembership == null) { 
+			if (instance instanceof RIFVar) {
+				for (RIFFormula body : subClassDescriptions){
+					for (RIFFormula head : superClassDescriptions){
+						try {
+							addRule(rules, head, body);
+						} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+							logger.info("ignoring RIFCore-invalid rule:\n" + head.toString("  ") + " :- " + body.toString("  "), e);
+						}
+					}
+				}
+			} else {
+				// ... unless the instance is an individual not a variable, in which case, all definite concrete superclass statements can be stated about that individual
+				try {
+					for (RIFStatement axiom : constructValidAxioms(superClassDescriptions)) {
+						rules.addSentence(axiom);
+					}
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFAxiomException e) {
+					logger.info("Complex axiom " + superClassDescriptions.toString() + " is not a valid RIFCore axiom, so has been ignored.", e);
+				}
+			}
+		} else {
+		// If named, all subclasses imply this class, and this class implies all superclasses
+			for (RIFFormula body : subClassDescriptions){
+				try {
+					addRule(rules, classMembership, body);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n" + classMembership.toString("  ") + " :- " + body.toString("  "), e);
+				}
+			}
+			for (RIFFormula head : superClassDescriptions){
+				try {
+					addRule(rules, head, classMembership);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n" + head.toString("  ") + " :- " + classMembership.toString("  "), e);
+				}
+			}
+		}
+		
+		return rules;
 	}
 	
 	protected RIFGroup compileProper(RIFGroup rules){
@@ -614,33 +668,29 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		complementClasses.addAll(getChildElementsByTagNameNS(clazz, OWL_PREFIX, "disjointWith"));
 		rules = compileComplements(rules, complementClasses);
 		
-		// After establishing the class description and the hierarchy directly above and below the class, express subsumption rules concerning the class
-		// If anonymous, all subclasses imply all superclasses...
-		if (classMembership == null) { 
-			if (instance instanceof RIFVar) {
-				for (RIFFormula body : subClassDescriptions){
-					for (RIFFormula head : superClassDescriptions){
-						addRule(rules, head, body);
-					}
+		// if the class is a description of a class that is named then it is not a definition of that class, rather a definition of a class that is both a subclass of that class and further specifications.
+		// if the class specification has not been made more specific (i.e. this description has provided no additional sub-/super class descriptions) then this is simply a class reference.
+		// if the specification is more specific (i.e. additional sub-/super classes have been specified) then the named class that is the subject of this description is a required superClass of the described class rather than the class itself, so must be added as an intersection of every other body clause (subClassDescription)
+		if (clazz.getTagName().endsWith("Description")
+				&& classMembership != null
+				&& (subClassDescriptions.iterator().hasNext()
+						|| superClassDescriptions.iterator().hasNext())){
+			if (this.subClassDescriptions.iterator().hasNext()){
+				RIFOr strictSubClassDescriptions = this.subClassDescriptions;
+				this.subClassDescriptions = new RIFOr();
+				for (RIFFormula body : strictSubClassDescriptions){
+					RIFAnd and = new RIFAnd();
+					and.addFormula(body);
+					and.addFormula(this.classMembership);
+					
+					this.subClassDescriptions.addFormula(and);
 				}
 			} else {
-				// ... unless the instance is an individual not a variable, in which case, all definite concrete superclass statements can be stated about that individual
-				try {
-					for (RIFStatement axiom : constructValidAxioms(superClassDescriptions)) {
-						rules.addSentence(axiom);
-					}
-				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFAxiomException e) {
-					logger.info("Complex axiom " + superClassDescriptions.toString() + " is not a valid RIFCore axiom, so has been ignored.", e);
-				}
+				this.subClassDescriptions.addFormula(this.classMembership);
 			}
-		} else {
-		// If named, all subclasses imply this class, and this class implies all superclasses
-			for (RIFFormula body : subClassDescriptions){
-				addRule(rules, classMembership, body);
-			}
-			for (RIFFormula head : superClassDescriptions){
-				addRule(rules, head, classMembership);
-			}
+			
+			// This description is not of the specified class, but of a subclass thereof, so is anonymous
+			this.classMembership = null;
 		}
 		
 		return rules;
@@ -778,7 +828,11 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 				}
 				exists.addFormula(complementPair);
 				
-				addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+				try {
+					addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + exists.toString("  "), e);
+				}
 			}
 			if (complementClass.hasChildNodes()){
 				Collection<Element> classes = getChildElementsByTagNameNS(complementClass, OWL_PREFIX, "Class");
@@ -811,18 +865,17 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 				}
 			} else {
 				Collection<Element> properties = getChildElementsByTagNameNS(restrictedProperty, OWL_PREFIX, "ObjectProperty");
-				try {
-					return new OWLPropertyCompiler(properties.iterator().next(), instance);
-				} catch (NoSuchElementException e) {}
-				properties = getChildElementsByTagNameNS(restrictedProperty, OWL_PREFIX, "DatatypeProperty");
+				properties.addAll(getChildElementsByTagNameNS(restrictedProperty, OWL_PREFIX, "DatatypeProperty"));
 				try {
 					return new OWLPropertyCompiler(properties.iterator().next(), instance);
 				} catch (NoSuchElementException e) {}
 				properties = getChildElementsByTagNameNS(restrictedProperty, RDF_PREFIX, "Description");
 				try {
-					return new OWLPropertyCompiler(properties.iterator().next(), instance);
+					return new OWLDescribedPropertyCompiler(properties.iterator().next(), instance);
 				} catch (NoSuchElementException e) {
 					throw new RuntimeException("No property specified in Restriction " + (classMembership == null ? (subClassDescriptions.iterator().hasNext() ? subClassDescriptions.toString() : "at ontology root") : classMembership.toString()) + ".",e); 
+				} catch (URISyntaxException e) {
+					return new OWLPropertyCompiler(properties.iterator().next(), instance);
 				}
 			}
 		} catch (NoSuchElementException e) {
@@ -927,7 +980,11 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 			if (instance instanceof RIFVar) {
 				restriction.addExistentialVar((RIFVar) instance);
 			}
-			addRule(rules, object, head, restriction);
+			try {
+				addRule(rules, object, head, restriction);
+			} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+				logger.info("ignoring RIFCore-invalid rule:\n" + head.toString("  ") + " :- " + restriction.toString("  "), e);
+			}
 			return rules;
 		}
 		
@@ -1110,7 +1167,11 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		
 		if (number == 0){
 			restriction.addExistentialVar(object);
-			addRule(rules, universalVars, new RIFError(), restriction);		
+			try {
+				addRule(rules, universalVars, new RIFError(), restriction);
+			} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+				logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + restriction.toString("  "), e);
+			}		
 		} else /*number == 1*/ {
 			universalVars.add(object);
 			
@@ -1149,7 +1210,12 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 				rules.addSentence(sentence);
 			}
 			
-			addRule(rules, universalVars, constructOWLSameAs(object, object2), restriction);
+			RIFFrame constructOWLSameAs = constructOWLSameAs(object, object2);
+			try {
+				addRule(rules, universalVars, constructOWLSameAs, restriction);
+			} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+				logger.info("ignoring RIFCore-invalid rule:\n" + constructOWLSameAs.toString("  ") + " :- " + restriction.toString("  "), e);
+			}
 		}
 
 		return rules;
@@ -1328,7 +1394,11 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 		if (number == 0){
 			// Add a rule to express that the body constructed thus far implies an error in the data/ontology
 			restriction.addExistentialVar(object);
-			addRule(rules, new RIFError(), restriction);		
+			try {
+				addRule(rules, universalVars, new RIFError(), restriction);
+			} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+				logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + restriction.toString("  "), e);
+			}		
 		} else /*number == 1*/ {
 			universalVars.add(object);
 			
@@ -1387,7 +1457,12 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 			}
 			
 			// add a rule specifying that when two individuals of the qualifying class are linked to the same instance by the given predicate, they must be the same individual. 
-			addRule(rules, universalVars, constructOWLSameAs(object, object2), restriction);
+			RIFFrame constructOWLSameAs = constructOWLSameAs(object, object2);
+			try {
+				addRule(rules, universalVars, constructOWLSameAs, restriction);
+			} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+				logger.info("ignoring RIFCore-invalid rule:\n" + constructOWLSameAs.toString("  ") + " :- " + restriction.toString("  "), e);
+			}
 		}
 
 		return rules;
@@ -1428,14 +1503,14 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 	
 	// methods for abbreviating adding RIFForAll wrapped rules to the ruleset
 
-	protected RIFGroup addRule(RIFGroup rules, RIFFormula head, RIFFormula body){
+	protected RIFGroup addRule(RIFGroup rules, RIFFormula head, RIFFormula body) throws InvalidRIFRuleException{
 		if (instance instanceof RIFVar){
 			return addRule(rules, (RIFVar) instance, head, body);
 		}
 		return addRule(rules, new HashSet<RIFVar>(), head, body);
 	}
 	
-	protected RIFGroup addRule(RIFGroup rules, RIFVar instance, RIFFormula head, RIFFormula body){
+	protected RIFGroup addRule(RIFGroup rules, RIFVar instance, RIFFormula head, RIFFormula body) throws InvalidRIFRuleException{
 		Collection<RIFVar> universalVars = new HashSet<RIFVar>();
 		universalVars.add(instance);
 		
@@ -1466,7 +1541,7 @@ class OWLEquivalentClassCompiler extends OWLClassCompiler {
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
-		return this.compileProper(rules);
+		return super.compile(rules);
 	}
 	
 }
@@ -1489,7 +1564,7 @@ class OWLSuperClassCompiler extends OWLClassCompiler {
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
-		return this.compileProper(rules);
+		return super.compile(rules);
 	}
 	
 }
@@ -1517,66 +1592,39 @@ class OWLIntersectionMemberCompiler extends OWLClassCompiler {
 	}
 	
 	@Override
-	public RIFGroup compile(RIFGroup rules) {
-		RIFGroup subrules;
+	public RIFGroup compile(RIFGroup rules) { 
+		rules = this.compileProper(rules);
+			
 		if (anonymous){
-			subrules = new RIFGroup();
+			parentClassDescription.addFormula(superClassDescriptions);
+			
+			Set<RIFAnd> newAnds = new HashSet<RIFAnd>();
+			for (RIFFormula body : subClassDescriptions){
+				if (intersections.isEmpty()){
+					RIFAnd newAnd = new RIFAnd();
+					newAnd.addFormula(body);
+					newAnds.add(newAnd);
+				} else {
+					for (RIFAnd intersection : intersections){
+						RIFAnd newAnd = new RIFAnd();
+						for (RIFFormula formula : intersection){
+							newAnd.addFormula(formula);
+						}
+						newAnd.addFormula(body);
+						
+						newAnds.add(newAnd);
+					}
+				}
+			}
+			intersections.clear();
+			intersections.addAll(newAnds);
 		} else {
-			subrules = rules;
+			rules = super.resolveSubAndSuperClassDescriptions(rules);
+			
 			parentClassDescription.addFormula(classMembership);
 			for (RIFAnd intersection : intersections){
 				intersection.addFormula(classMembership);
 			}
-		}
-
-		// Compile intersection member with either declared or Anonymous class membership as the top 
-		subrules = this.compileProper(subrules);
-			
-		if (anonymous){
-			Set<RIFAnd> newAnds = new HashSet<RIFAnd>();
-			for (RIFSentence sentence : subrules){
-				// process subrules - some may be independent rules derived from named class definitions, some may be tied to the parent class definition via an anonymous class.
-				RIFSentence statement;
-				if (sentence instanceof RIFForAll){
-					statement = ((RIFForAll) sentence).getStatement();
-				} else {
-					statement = sentence;
-				}
-				
-				if (statement instanceof RIFRule) {
-					RIFRule rule = (RIFRule) statement;
-					// heads of bodyless rules from a class intersection are also implied by membership of this class
-					if (rule.getBody() == classMembership){
-						parentClassDescription.addFormula(rule.getHead());
-						continue;
-					}
-					// bodies of headless rules from a class intersection each contribute to implying membership of this class
-					//   (the possible implications consist of the Cartesian Product of the sets of implications of all classes
-					//    in the intersection.)
-					if (rule.getHead() == classMembership){
-						if (intersections.isEmpty()){
-							RIFAnd newAnd = new RIFAnd();
-							newAnd.addFormula(rule.getBody());
-							newAnds.add(newAnd);
-						} else {
-							for (RIFAnd intersection : intersections){
-								RIFAnd newAnd = new RIFAnd();
-								for (RIFFormula formula : intersection){
-									newAnd.addFormula(formula);
-								}
-								newAnd.addFormula(rule.getBody());
-								
-								newAnds.add(newAnd);
-							}
-						}
-						continue;
-					}
-				}
-				
-				rules.addSentence(sentence);
-			}
-			intersections.clear();
-			intersections.addAll(newAnds);
 		}
 		
 		return rules;
@@ -1606,45 +1654,16 @@ class OWLUnionMemberCompiler extends OWLClassCompiler {
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
-		RIFGroup subrules;
+		rules = this.compileProper(rules);
+		
 		if (anonymous){
-			subrules = new RIFGroup();
+			parentClassDescription.addFormula(subClassDescriptions);
+			union.addFormula(superClassDescriptions);
 		} else {
-			subrules = rules;
+			rules = super.resolveSubAndSuperClassDescriptions(rules);
+			
 			parentClassDescription.addFormula(classMembership);
 			union.addFormula(classMembership);
-		}
-		
-		subrules = this.compileProper(subrules);
-		
-		if (anonymous){
-			RIFAnd and = new RIFAnd();
-			for (RIFSentence sentence : subrules){
-				RIFSentence statement;
-				if (sentence instanceof RIFForAll){
-					statement = ((RIFForAll) sentence).getStatement();
-				} else {
-					statement = sentence;
-				}
-				
-				if (statement instanceof RIFRule) {
-					RIFRule rule = (RIFRule) statement;
-					
-					// bodies of headless rules from a class union also imply membership of this class
-					if (rule.getHead() == classMembership){
-						parentClassDescription.addFormula(rule.getBody());
-						continue;
-					}
-					// all heads of bodyless rules, collectively, from a class union are also potentially implied by membership of this class
-					if (rule.getBody() == classMembership){
-						and.addFormula(rule.getHead());
-						continue;
-					}
-				}
-				
-				rules.addSentence(sentence);
-			}
-			union.addFormula(and);
 		}
 		
 		return rules;
@@ -1653,6 +1672,8 @@ class OWLUnionMemberCompiler extends OWLClassCompiler {
 }
 
 class OWLComplementClassCompiler extends OWLClassCompiler {
+	
+	private static final Logger logger = Logger.getLogger(OWLComplementClassCompiler.class);
 	
 	private final RIFFormula complementClassDescription;
 	private final boolean anonymous;
@@ -1672,62 +1693,57 @@ class OWLComplementClassCompiler extends OWLClassCompiler {
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
+		rules = this.compileProper(rules);
 		
-		RIFGroup subrules;
 		if (anonymous){
-			subrules = new RIFGroup();
+			for (RIFFormula body : subClassDescriptions){
+				RIFAnd complementPair = new RIFAnd();
+				complementPair.addFormula(body);
+				complementPair.addFormula(complementClassDescription);
+				
+				if (instance instanceof RIFVar){
+					RIFExists exists = new RIFExists();
+					exists.addExistentialVar((RIFVar) instance);
+					exists.addFormula(complementPair);
+					
+					try {
+						addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+					} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+						logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + exists.toString("  "), e);
+					}
+				} else {
+					try {
+						addRule(rules, new HashSet<RIFVar>(), new RIFError(), complementPair);
+					} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+						logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + complementPair.toString("  "), e);
+					}
+				}
+			}
 		} else {
-			subrules = rules;
+			rules = super.resolveSubAndSuperClassDescriptions(rules);
+			
 			RIFAnd complementPair = new RIFAnd();
 			complementPair.addFormula(classMembership);
 			complementPair.addFormula(complementClassDescription);
 			
-			RIFExists exists = new RIFExists();
 			if (instance instanceof RIFVar){
+				RIFExists exists = new RIFExists();
 				exists.addExistentialVar((RIFVar) instance);
+				exists.addFormula(complementPair);
+				
+				try {
+					addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + exists.toString("  "), e);
+				}
+			} else {
+				try {
+					addRule(rules, new HashSet<RIFVar>(), new RIFError(), complementPair);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + complementPair.toString("  "), e);
+				}
 			}
-			exists.addFormula(complementPair);
 			
-			addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
-		}
-		
-		subrules = this.compileProper(subrules);
-		
-		if (anonymous){
-			for (RIFSentence sentence : subrules){
-				RIFSentence statement;
-				if (sentence instanceof RIFForAll){
-					statement = ((RIFForAll) sentence).getStatement();
-				} else {
-					statement = sentence;
-				}
-
-				if (statement instanceof RIFRule) {
-					RIFRule rule = (RIFRule) statement;
-
-					// bodies of headless rules from this class should never be met by members of the complement class
-					if (rule.getHead() == classMembership){
-						RIFAnd complementPair = new RIFAnd();
-						complementPair.addFormula(rule.getBody());
-						complementPair.addFormula(complementClassDescription);
-						
-						RIFExists exists = new RIFExists();
-						if (instance instanceof RIFVar){
-							exists.addExistentialVar((RIFVar) instance);
-						}
-						exists.addFormula(complementPair);
-						
-						addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
-						continue;
-					}
-					// membership of this class implies nothing specific 
-					if (rule.getBody() == classMembership){
-						continue;
-					}
-				}
-
-				rules.addSentence(sentence);
-			}
 		}
 		
 		return rules;
@@ -1756,44 +1772,14 @@ class OWLExistentialRangeCompiler extends OWLClassCompiler {
 	}
 	
 	public RIFGroup compile(RIFGroup rules){
-		RIFGroup subrules;
+		rules = this.compileProper(rules);
+		
 		if (anonymous){
-			subrules = new RIFGroup();
+			this.body.addFormula(subClassDescriptions);
 		} else {
-			subrules = rules;
-			this.body.addFormula(classMembership);
-		}
-		
-		subrules = this.compileProper(subrules);
-		
-		if (anonymous){
-			RIFOr qualifyingBodies = new RIFOr();
-			for (RIFSentence sentence : subrules){
-				RIFSentence statement;
-				if (sentence instanceof RIFForAll){
-					statement = ((RIFForAll) sentence).getStatement();
-				} else {
-					statement = sentence;
-				}
-
-				if (statement instanceof RIFRule) {
-					RIFRule rule = (RIFRule) statement;
-
-					// bodies of headless rules from a qualifying class are also part of the implication of membership of this class
-					if (rule.getHead() == classMembership){
-						qualifyingBodies.addFormula(rule.getBody());
-						continue;
-					}
-					// where rangeMembership implies something, this is ignored
-					if (rule.getBody() == classMembership){
-						continue;
-					}
-				}
-
-				rules.addSentence(sentence);
-			}
+			rules = super.resolveSubAndSuperClassDescriptions(rules);
 			
-			this.body.addFormula(qualifyingBodies);
+			this.body.addFormula(classMembership);
 		}
 		
 		return rules;
@@ -1820,44 +1806,13 @@ class OWLUniversalRangeCompiler extends OWLClassCompiler {
 	}
 	
 	public RIFGroup compile(RIFGroup rules){
-		RIFGroup subrules;
-		if (anonymous){
-			subrules = new RIFGroup();
+		rules = this.compileProper(rules);
+		
+		if (anonymous){			
+			this.head.addFormula(superClassDescriptions);
 		} else {
-			subrules = rules;
+			rules = super.resolveSubAndSuperClassDescriptions(rules);			
 			this.head.addFormula(classMembership);
-		}
-		
-		subrules = this.compileProper(subrules);
-		
-		if (anonymous){
-			RIFOr qualifyingBodies = new RIFOr();
-			for (RIFSentence sentence : subrules){
-				RIFSentence statement;
-				if (sentence instanceof RIFForAll){
-					statement = ((RIFForAll) sentence).getStatement();
-				} else {
-					statement = sentence;
-				}
-
-				if (statement instanceof RIFRule) {
-					RIFRule rule = (RIFRule) statement;
-
-					// where rangeMembership is implied by something, this is ignored
-					if (rule.getHead() == classMembership){
-						continue;
-					}
-					// heads of bodyless rules from a qualifying class are also part of the implied membership of this class
-					if (rule.getBody() == classMembership){
-						qualifyingBodies.addFormula(rule.getBody());
-						continue;
-					}
-				}
-
-				rules.addSentence(sentence);
-			}
-			
-			this.head.addFormula(qualifyingBodies);
 		}
 		
 		return rules;
@@ -1869,6 +1824,8 @@ class OWLUniversalRangeCompiler extends OWLClassCompiler {
 
 class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 
+	private static final Logger logger = Logger.getLogger(OWLPropertyCompiler.class);
+	
 	protected final Element property;
 	
 	protected RIFOr subPropertyDescription = new RIFOr();
@@ -1917,7 +1874,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 		return getPropertyMembership(object);
 	}
 	
-	private RIFFrame getPropertyMembership(RIFDatum object){
+	protected RIFFrame getPropertyMembership(RIFDatum object){
 		if (propertyIRI != null){
 			RIFFrame propertyMembership = new RIFFrame();
 			propertyMembership.setSubject(subject);
@@ -1933,96 +1890,115 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
 		if (this.object == null){
-			this.object = new RIFVar().setName("object");
+			return this.compile(rules, new RIFVar().setName("object"));
+		} else {
+			return this.compile(rules, this.object);
 		}
-		
-		return this.compileProper(rules);
 	}
 	
 	public RIFGroup compile(RIFGroup rules, RIFDatum object){
 		this.object = object;
-		return this.compileProper(rules);
+		
+		rules = compileProper(rules);
+		rules = resolveSubAndSuperClassDescriptions(rules);
+		return rules;
 	}
 	
-	protected RIFGroup compileProper(RIFGroup rules){
-		// Construct property membership if possible, and initialise the property description
+	protected RIFGroup resolveSubAndSuperClassDescriptions(RIFGroup rules){
 		RIFFrame propertyMembership = this.getPropertyMembership(object);
-		
-		// Property domain declarations
-		Collection<Element> ranges = getChildElementsByTagNameNS(property, RDFS_PREFIX, "range");
-		if (!ranges.isEmpty()) {
-			rules = compileRangeRestrictions(rules, propertyMembership, ranges);
-		}
-		Collection<Element> domains = getChildElementsByTagNameNS(property, RDFS_PREFIX, "domain");
-		if (!domains.isEmpty()) {
-			rules = compileDomainRestrictions(rules, propertyMembership, domains);
-		}
-		Collection<Element> types = getChildElementsByTagNameNS(property, RDF_PREFIX, "type");
-		if (!types.isEmpty()){
-			// TODO check if typed anonymous properties are valid OWL 2 RL
-			rules = compileTypeStatements(rules, propertyMembership, types);
-		}
-		Collection<Element> inverses = getChildElementsByTagNameNS(property, OWL_PREFIX, "inverseOf");
-		if (!inverses.isEmpty()) {
-			rules = compileEquivalentProperties(rules, propertyMembership, inverses, true, true);
-		}
-		Collection<Element> equivs = getChildElementsByTagNameNS(property, OWL_PREFIX, "equivalentProperty");
-		if (!equivs.isEmpty()) {
-			rules = compileEquivalentProperties(rules, propertyMembership, equivs, false, true);
-		}
-		Collection<Element> superProps = getChildElementsByTagNameNS(property, RDFS_PREFIX, "subPropertyOf");
-		if (!superProps.isEmpty()) {
-			rules = compileEquivalentProperties(rules, propertyMembership, superProps, false, false);
-		}
-		Collection<Element> disjoints = getChildElementsByTagNameNS(property, OWL_PREFIX, "propertyDisjointWith");
-		if (!disjoints.isEmpty()) {
-			rules = compileDisjointProperties(rules, propertyMembership, disjoints);
-		}
-		Collection<Element> chains = getChildElementsByTagNameNS(property, OWL_PREFIX, "propertyChainAxiom");
-		if (!chains.isEmpty()) {
-			for (Element chain : chains){
-				RIFAnd body = new RIFAnd();
-				NodeList links = chain.getChildNodes();
-				int i = 0;
-				RIFDatum subject = this.subject;
-				while (i < links.getLength()){
-					RIFDatum object;
-					if (i == links.getLength() - 1){
-						object = this.object;
-					} else {
-						object = new RIFVar().setName(this.object.getNode().toString() + "Intermediate" + i);
-					}
-					if (links.item(i).getNodeType() == Node.ELEMENT_NODE){
-						Element link = (Element) links.item(i);
-						
-						OWLPropertyCompiler pc = null;
-						if (link.getNodeName().endsWith("Description")){
-							String linkName = link.getAttributeNS(RDF_PREFIX, "about");
-							try {
-								pc = new OWLReferencedPropertyCompiler(new URI(linkName), subject, object);
-							} catch (URISyntaxException e) {
-								throw new RuntimeException("Referenced property " + linkName + " in chain must be a valid IRI.", e);
-							}
-						} else if (link.getNodeName().endsWith("Property")){
-							pc = new OWLPropertyCompiler(link, subject, object);
-							rules = pc.compile(rules);
-						}
-						
-						body.addFormula(pc.getPropertyDescription());
-					}
-					
-					subject = object;
-					i++;
+		if (propertyMembership == null) for (RIFFormula body : subPropertyDescription){
+			for (RIFFormula head : superPropertyDescription){
+				try {
+					addRule(rules, head, body);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n" + head.toString("  ") + " :- " + body.toString("  "), e);
 				}
-				
-				subPropertyDescription.addFormula(body);
+			}
+		} else {
+			for (RIFFormula body : subPropertyDescription){
+				try {
+					addRule(rules, propertyMembership, body);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n" + propertyMembership.toString("  ") + " :- " + body.toString("  "), e);
+				}
+			}
+			for (RIFFormula head : superPropertyDescription){
+				try {
+					addRule(rules, head, propertyMembership);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n" + head.toString("  ") + " :- " + propertyMembership.toString("  "), e);
+				}
 			}
 		}
 		
 		return rules;
 	}
+	
+	protected RIFGroup compileProper(RIFGroup rules){
+		// Property domain declarations
+		Collection<Element> ranges = getChildElementsByTagNameNS(property, RDFS_PREFIX, "range");
+		if (!ranges.isEmpty()) {
+			rules = compileRangeRestrictions(rules, ranges);
+		}
+		Collection<Element> domains = getChildElementsByTagNameNS(property, RDFS_PREFIX, "domain");
+		if (!domains.isEmpty()) {
+			rules = compileDomainRestrictions(rules, domains);
+		}
+		Collection<Element> types = getChildElementsByTagNameNS(property, RDF_PREFIX, "type");
+		if (!types.isEmpty()){
+			// TODO check if typed anonymous properties are valid OWL 2 RL
+			rules = compileTypeStatements(rules, types);
+		}
+		Collection<Element> inverses = getChildElementsByTagNameNS(property, OWL_PREFIX, "inverseOf");
+		if (!inverses.isEmpty()) {
+			rules = compileEquivalentProperties(rules, inverses, true, true);
+		}
+		Collection<Element> equivs = getChildElementsByTagNameNS(property, OWL_PREFIX, "equivalentProperty");
+		if (!equivs.isEmpty()) {
+			rules = compileEquivalentProperties(rules, equivs, false, true);
+		}
+		Collection<Element> superProps = getChildElementsByTagNameNS(property, RDFS_PREFIX, "subPropertyOf");
+		if (!superProps.isEmpty()) {
+			rules = compileEquivalentProperties(rules, superProps, false, false);
+		}
+		Collection<Element> disjoints = getChildElementsByTagNameNS(property, OWL_PREFIX, "propertyDisjointWith");
+		if (!disjoints.isEmpty()) {
+			rules = compileDisjointProperties(rules, disjoints);
+		}
+		Collection<Element> chains = getChildElementsByTagNameNS(property, OWL_PREFIX, "propertyChainAxiom");
+		if (!chains.isEmpty()) {
+			rules = compilePropertyChains(rules, chains);
+		}
+		
+		// if the property is a description of a property that is named then it is not a definition of that property, rather a definition of a class of property that is both that property and further specifications.
+		// if the property specification has not been made more specific (i.e. this description has provided no additional sub-/super property descriptions) then this is simply a property reference.
+		// if the specification is more specific (i.e. additional sub-/super properties have been specified) then the named property that is the subject of this description is a required superProperty of the described property rather than the property described itself, so must be added as an intersection of every other body clause (subPropertyDescription)
+		if (property.getTagName().endsWith("Description")
+				&& propertyIRI != null
+				&& (subPropertyDescription.iterator().hasNext()
+						|| superPropertyDescription.iterator().hasNext())){
+			if (this.subPropertyDescription.iterator().hasNext()){
+				RIFOr strictSubPropertyDescriptions = this.subPropertyDescription;
+				this.subPropertyDescription = new RIFOr();
+				for (RIFFormula body : strictSubPropertyDescriptions){
+					RIFAnd and = new RIFAnd();
+					and.addFormula(body);
+					and.addFormula(getPropertyMembership(object));
+					
+					this.subPropertyDescription.addFormula(and);
+				}
+			} else {
+				this.subPropertyDescription.addFormula(getPropertyMembership(object));
+			}
+			
+			// This description is not of the specified property, but of a subclass thereof, so is anonymous
+			this.propertyIRI = null;
+		}
+		
+		return rules;
+	}
 
-	private RIFGroup compileRangeRestrictions(RIFGroup rules, RIFFrame propertyMembership, Collection<Element> ranges) {
+	private RIFGroup compileRangeRestrictions(RIFGroup rules, Collection<Element> ranges) {
 		for (Element range : ranges){
 			String rangeName = range.getAttributeNS(RDF_PREFIX, "resource");
 			RIFAnd head = new RIFAnd();
@@ -2040,11 +2016,11 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 																		(RIFAnd) head);
 						rules = erc.compile(rules);
 					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No range specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".",e); 
+						throw new RuntimeException("No range specified for property " + (getPropertyMembership(object) == null ? subPropertyDescription : getPropertyMembership(object)) + ".",e); 
 					}
 				}
 			} else {
-				throw new RuntimeException("No range specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".");
+				throw new RuntimeException("No range specified for property " + (getPropertyMembership(object) == null ? subPropertyDescription : getPropertyMembership(object)) + ".");
 			}
 			
 			superPropertyDescription.addFormula(head);
@@ -2052,7 +2028,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 		return rules;
 	}
 	
-	private RIFGroup compileDomainRestrictions(RIFGroup rules, RIFFrame propertyMembership, Collection<Element> domains) {
+	private RIFGroup compileDomainRestrictions(RIFGroup rules, Collection<Element> domains) {
 		for (Element domain : domains){
 			String domainName = domain.getAttributeNS(RDF_PREFIX, "resource");
 			RIFAnd head = new RIFAnd();
@@ -2070,11 +2046,11 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 																		(RIFAnd) head);
 						rules = erc.compile(rules);
 					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No domain specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".",e); 
+						throw new RuntimeException("No domain specified for property " + (getPropertyMembership(object) == null ? subPropertyDescription : getPropertyMembership(object)) + ".",e); 
 					}
 				}
 			} else {
-				throw new RuntimeException("No domain specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".");
+				throw new RuntimeException("No domain specified for property " + (getPropertyMembership(object) == null ? subPropertyDescription : getPropertyMembership(object)) + ".");
 			}
 			
 			superPropertyDescription.addFormula(head);
@@ -2082,12 +2058,12 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 		return rules;
 	}
 	
-	private RIFGroup compileTypeStatements(RIFGroup rules, RIFFrame propertyMembership, Collection<Element> types){
+	private RIFGroup compileTypeStatements(RIFGroup rules, Collection<Element> types){
 		for (Element type : types){
 			String typeName = type.getAttributeNS(RDF_PREFIX, "resource");
 			if (typeName.length() > 0){
 				if (typeName.equals("http://www.w3.org/2002/07/owl#FunctionalProperty")){
-					if (propertyMembership == null) {
+					if (getPropertyMembership(object) == null) {
 						// TODO check
 						throw new RuntimeException("Anonymous property descriptions cannot be functional.");
 					}
@@ -2099,21 +2075,35 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 					secondMembership.setObject(second);
 					
 					RIFAnd body = new RIFAnd();
-					body.addFormula(propertyMembership);
+					body.addFormula(getPropertyMembership(object));
 					body.addFormula(secondMembership);
 					
 					Collection<RIFVar> uvs = new HashSet<RIFVar>();
-					if (subject instanceof RIFVar) {
-						uvs.add((RIFVar) subject);
-					}
 					if (object instanceof RIFVar) {
 						uvs.add((RIFVar) object);
 					}
 					uvs.add(second);
 					
-					rules = addRule(rules, uvs, constructOWLSameAs(object, second), body);
+					RIFFrame constructOWLSameAs = constructOWLSameAs(object, second);
+					if (subject instanceof RIFVar) {
+						RIFExists exists = new RIFExists();
+						exists.addExistentialVar((RIFVar) subject);
+						exists.addFormula(body);
+						
+						try {
+							rules = addRule(rules, uvs, constructOWLSameAs, exists);
+						} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+							logger.info("ignoring RIFCore-invalid rule:\n" + constructOWLSameAs.toString("  ") + " :- " + exists.toString("  "), e);
+						}
+					} else {
+						try {
+							rules = addRule(rules, uvs, constructOWLSameAs, body);
+						} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+							logger.info("ignoring RIFCore-invalid rule:\n" + constructOWLSameAs.toString("  ") + " :- " + body.toString("  "), e);
+						}
+					}
 				} else if (typeName.equals("http://www.w3.org/2002/07/owl#InverseFunctionalProperty")){
-					if (propertyMembership == null) {
+					if (getPropertyMembership(object) == null) {
 						// TODO check
 						throw new RuntimeException("Anonymous property descriptions cannot be inverse functional.");
 					}
@@ -2125,21 +2115,35 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 					secondMembership.setObject(object);
 					
 					RIFAnd body = new RIFAnd();
-					body.addFormula(propertyMembership);
+					body.addFormula(getPropertyMembership(object));
 					body.addFormula(secondMembership);
 					
 					Collection<RIFVar> uvs = new HashSet<RIFVar>();
 					if (subject instanceof RIFVar) {
 						uvs.add((RIFVar) subject);
 					}
-					if (object instanceof RIFVar) {
-						uvs.add((RIFVar) object);
-					}
 					uvs.add(second);
 					
-					rules = addRule(rules, uvs, constructOWLSameAs(subject, second), body);
+					RIFFrame constructOWLSameAs = constructOWLSameAs(subject, second);
+					if (object instanceof RIFVar) {
+						RIFExists exists = new RIFExists();
+						exists.addExistentialVar((RIFVar) object);
+						exists.addFormula(body);
+						
+						try {
+							rules = addRule(rules, uvs, constructOWLSameAs, exists);
+						} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+							logger.info("ignoring RIFCore-invalid rule:\n" + constructOWLSameAs.toString("  ") + " :- " + exists.toString("  "), e);
+						}
+					} else {
+						try {
+							rules = addRule(rules, uvs, constructOWLSameAs, body);
+						} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+							logger.info("ignoring RIFCore-invalid rule:\n" + constructOWLSameAs.toString("  ") + " :- " + body.toString("  "), e);
+						}
+					}
 				} else if (typeName.equals("http://www.w3.org/2002/07/owl#IrreflexiveProperty")){
-					if (propertyMembership == null) {
+					if (getPropertyMembership(object) == null) {
 						// TODO check
 						throw new RuntimeException("Anonymous property descriptions cannot be irreflexive.");
 					}
@@ -2154,12 +2158,20 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 						exists.addExistentialVar((RIFVar) subject);
 						exists.addFormula(body);
 						
-						rules = addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+						try {
+							rules = addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+						} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+							logger.info("ignoring RIFCore-invalid rule:\n  rif:error :- " + exists.toString("  "), e);
+						}
 					} else {
-						rules = addRule(rules, new HashSet<RIFVar>(), new RIFError(), body);
+						try {
+							rules = addRule(rules, new HashSet<RIFVar>(), new RIFError(), body);
+						} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+							logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + body.toString("  "), e);
+						}
 					}
 				} else if (typeName.equals("http://www.w3.org/2002/07/owl#SymmetricProperty")){
-					if (propertyMembership == null) {
+					if (getPropertyMembership(object) == null) {
 						// TODO check
 						throw new RuntimeException("Anonymous property descriptions cannot be symmetric.");
 					}
@@ -2169,9 +2181,10 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 					body.setPredicate(propertyIRI);
 					body.setObject(subject);
 					
+					superPropertyDescription.addFormula(body);
 					subPropertyDescription.addFormula(body);
 				} else if (typeName.equals("http://www.w3.org/2002/07/owl#AsymmetricProperty")){
-					if (propertyMembership == null) {
+					if (getPropertyMembership(object) == null) {
 						// TODO check
 						throw new RuntimeException("Anonymous property descriptions cannot be asymmetric.");
 					}
@@ -2182,7 +2195,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 					symmetric.setObject(subject);
 					
 					RIFAnd body = new RIFAnd();
-					body.addFormula(propertyMembership);
+					body.addFormula(getPropertyMembership(object));
 					body.addFormula(symmetric);
 					
 					RIFExists exists = new RIFExists();
@@ -2194,57 +2207,55 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 					}
 					if (exists.existentialVars().iterator().hasNext()){
 						exists.addFormula(body);
-						rules = addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+						try {
+							rules = addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+						} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+							logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + exists.toString("  "), e);
+						}
 					} else {
-						rules = addRule(rules, new HashSet<RIFVar>(), new RIFError(), body);						
+						try {
+							rules = addRule(rules, new HashSet<RIFVar>(), new RIFError(), body);
+						} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+							logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + body.toString("  "), e);
+						}						
 					}
 					
 				} else if (typeName.equals("http://www.w3.org/2002/07/owl#TransitiveProperty")){
-					if (propertyMembership == null) {
+					if (getPropertyMembership(object) == null) {
 						// TODO check
 						throw new RuntimeException("Anonymous property descriptions cannot be asymmetric.");
 					}
 					
 					RIFVar second = new RIFVar().setName(object.getNode().toString() + "~");
 					
-					RIFFrame transitive = new RIFFrame();
-					transitive.setSubject(object);
-					transitive.setPredicate(propertyIRI);
-					transitive.setObject(second);
+					RIFFrame transitive1 = new RIFFrame();
+					transitive1.setSubject(second);
+					transitive1.setPredicate(propertyIRI);
+					transitive1.setObject(object);
 					
+					RIFFrame transitive2 = new RIFFrame();
+					transitive2.setSubject(subject);
+					transitive2.setPredicate(propertyIRI);
+					transitive2.setObject(second);
+
 					RIFAnd body = new RIFAnd();
-					body.addFormula(propertyMembership);
-					body.addFormula(transitive);
+					body.addFormula(transitive1);
+					body.addFormula(transitive2);
 					
-					Collection<RIFVar> uvs = new HashSet<RIFVar>();
-					if (subject instanceof RIFVar) {
-						uvs.add((RIFVar) subject);
-					}
-					uvs.add(second);
+					RIFExists exists = new RIFExists();
+					exists.addExistentialVar(second);
+					exists.addFormula(body);
 					
-					RIFFrame head = new RIFFrame();
-					head.setSubject(subject);
-					head.setPredicate(propertyIRI);
-					head.setObject(second);
-					
-					if (object instanceof RIFVar){
-						RIFExists exists = new RIFExists();
-						exists.addExistentialVar((RIFVar) object);
-						exists.addFormula(body);
-						
-						rules = addRule(rules, uvs, head, exists);
-					} else {
-						rules = addRule(rules, uvs, head, body);						
-					}					
+					subPropertyDescription.addFormula(exists);
 				} else {
-					throw new RuntimeException("Property type " + typeName + "is not a valid type for a property in OWL 2 RL.");
+					logger.info("Property type " + typeName + "is not a valid type for a property in OWL 2 RL, so will be ignored.");
 				}
 			}
 		}
 		return rules;
 	}
 	
-	private RIFGroup compileEquivalentProperties(RIFGroup rules, RIFFrame propertyMembership, Collection<Element> equivalents, boolean inverse, boolean subProperty) {
+	private RIFGroup compileEquivalentProperties(RIFGroup rules, Collection<Element> equivalents, boolean inverse, boolean subProperty) {
 		for (Element equiv : equivalents){
 			String equivName = equiv.getAttributeNS(RDF_PREFIX, "resource");
 			RIFAnd head = new RIFAnd();
@@ -2257,7 +2268,11 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 					secondMembership.setSubject(subject);
 					secondMembership.setObject(object);
 				}
-				secondMembership.setPredicate(propertyIRI);
+				try {
+					secondMembership.setPredicate(new RIFIRIConst().setData(new URI(equivName)));
+				} catch (URISyntaxException e) {
+					throw new RuntimeException("equivalent, sub- or inverse property reference must point to a valid IRI.", e);
+				}
 				head.addFormula(secondMembership);
 			} else if (equiv.hasChildNodes()) {
 				Collection<Element> inverseProperties = getChildElementsByTagNameNS(equiv, OWL_PREFIX, "ObjectProperty");
@@ -2280,11 +2295,11 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 						rules = erc.compile(rules);
 						head.addFormula(erc.getPropertyDescription());
 					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".",e); 
+						throw new RuntimeException("No inverse specified for property " + (getPropertyMembership(object) == null ? subPropertyDescription : getPropertyMembership(object)) + ".",e); 
 					}
 				}
 			} else {
-				throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".");
+				throw new RuntimeException("No inverse specified for property " + (getPropertyMembership(object) == null ? subPropertyDescription : getPropertyMembership(object)) + ".");
 			}
 			
 			Collection<RIFVar> uvs = new HashSet<RIFVar>();
@@ -2303,7 +2318,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 		return rules;
 	}
 	
-	private RIFGroup compileDisjointProperties(RIFGroup rules, RIFFrame propertyMembership, Collection<Element> disjoints) {
+	private RIFGroup compileDisjointProperties(RIFGroup rules, Collection<Element> disjoints) {
 		for (Element equiv : disjoints){
 			String equivName = equiv.getAttributeNS(RDF_PREFIX, "resource");
 			RIFAnd body = new RIFAnd();
@@ -2327,14 +2342,14 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 						rules = erc.compile(rules);
 						body.addFormula(erc.getPropertyDescription());
 					} catch (NoSuchElementException e) {
-						throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".",e); 
+						throw new RuntimeException("No inverse specified for property " + (getPropertyMembership(object) == null ? subPropertyDescription : getPropertyMembership(object)) + ".",e); 
 					}
 				}
 			} else {
-				throw new RuntimeException("No inverse specified for property " + (propertyMembership == null ? subPropertyDescription : propertyMembership) + ".");
+				throw new RuntimeException("No inverse specified for property " + (getPropertyMembership(object) == null ? subPropertyDescription : getPropertyMembership(object)) + ".");
 			}
 			
-			body.addFormula(propertyMembership == null ? subPropertyDescription : propertyMembership);
+			body.addFormula(getPropertyMembership(object) == null ? subPropertyDescription : getPropertyMembership(object));
 			
 			RIFExists exists = new RIFExists();
 			if (subject instanceof RIFVar){
@@ -2346,9 +2361,70 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 			if (exists.existentialVars().iterator().hasNext()){
 				exists.addFormula(body);
 				
-				addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+				try {
+					addRule(rules, new HashSet<RIFVar>(), new RIFError(), exists);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + exists.toString("  "), e);
+				}
 			} else {
-				addRule(rules, new HashSet<RIFVar>(), new RIFError(), body);
+				try {
+					addRule(rules, new HashSet<RIFVar>(), new RIFError(), body);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger.info("ignoring RIFCore-invalid rule:\n  rif:error() :- " + body.toString("  "), e);
+				}
+			}
+		}
+		return rules;
+	}
+	
+	private RIFGroup compilePropertyChains(RIFGroup rules, Collection<Element> chains) {
+		for (Element chain : chains){
+			RIFExists exists = new RIFExists();
+			RIFAnd body = new RIFAnd();
+			exists.addFormula(body);
+			
+			NodeList links = chain.getChildNodes();
+			int i = 0;
+			int elementCount = 0;
+			RIFDatum subject = this.subject;
+			OWLPropertyCompiler pc = null;
+			while (i < links.getLength()){
+				if (links.item(i).getNodeType() == Node.ELEMENT_NODE){
+					Element link = (Element) links.item(i);
+					
+					if (pc != null) {
+						rules = pc.compile(rules);
+						body.addFormula(pc.getPropertyDescription());
+						exists.addExistentialVar((RIFVar) pc.object);
+					}
+					
+					RIFDatum interObject = new RIFVar().setName(this.object.getNode().toString() + "Intermediate" + elementCount++);
+					
+					if (link.getNodeName().endsWith("Description")){
+						try {
+							pc = new OWLDescribedPropertyCompiler(link, subject, interObject);
+						} catch (URISyntaxException e) {
+							pc = new OWLPropertyCompiler(link, subject, interObject);
+						}
+					} else if (link.getNodeName().endsWith("Property")){
+						pc = new OWLPropertyCompiler(link, subject, interObject);
+					}
+					
+					subject = interObject;
+				}
+				
+				i++;
+			}
+			
+			if (pc != null) {
+				rules = pc.compile(rules, object);
+				body.addFormula(pc.getPropertyDescription());
+			}
+			
+			if (exists.existentialVars().iterator().hasNext()){
+				subPropertyDescription.addFormula(exists);
+			} else {
+				subPropertyDescription.addFormula(body);
 			}
 		}
 		return rules;
@@ -2356,7 +2432,7 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 	
 	// add rule stuff
 	
-	protected RIFGroup addRule(RIFGroup rules, RIFFormula head, RIFFormula body){
+	protected RIFGroup addRule(RIFGroup rules, RIFFormula head, RIFFormula body) throws InvalidRIFRuleException{
 		Collection<RIFVar> universalVars = new HashSet<RIFVar>();
 		if (subject instanceof RIFVar){
 			universalVars.add((RIFVar) subject);
@@ -2370,24 +2446,78 @@ class OWLPropertyCompiler extends OWLTranslater<RIFGroup> {
 	
 }
 
+class OWLDescribedPropertyCompiler extends OWLPropertyCompiler {
+	
+	private static final Logger logger = Logger.getLogger(OWLDescribedPropertyCompiler.class);
+
+	public OWLDescribedPropertyCompiler(Element propertyDescription, RIFDatum subject, RIFDatum object) throws URISyntaxException {
+		super(propertyDescription, subject, object);
+		
+		String about = propertyDescription.getAttributeNS(RDF_PREFIX, "about");
+		if (about.length() > 0) {
+			new URI(about);
+		} else{
+			throw new URISyntaxException("", "The empty string is not a valid URI");
+		}
+	}
+	
+	public OWLDescribedPropertyCompiler(Element propertyDescription, RIFDatum subject) throws URISyntaxException {
+		super(propertyDescription, subject);
+		
+		String about = propertyDescription.getAttributeNS(RDF_PREFIX, "about");
+		if (about.length() > 0) {
+			new URI(about);
+		} else{
+			throw new URISyntaxException("", "The empty string is not a valid URI");
+		}
+	}
+	
+	@Override
+	public RIFGroup compile(RIFGroup rules, RIFDatum object) {
+		this.object = object;
+		
+		rules = this.compileProper(rules);
+		
+		RIFFrame propertyMembership = this.getPropertyMembership(object);
+		for (RIFFormula body : subPropertyDescription){
+			RIFAnd and = new RIFAnd();
+			and.addFormula(body);
+			and.addFormula(propertyMembership);
+			for (RIFFormula head : superPropertyDescription){
+				try {
+					rules = addRule(rules, head, and);
+				} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFRuleException e) {
+					logger .info("ignoring RIFCore-invalid rule:\n" + head.toString("  ") + " :- " + and.toString("  "), e);
+				}
+			}
+		}
+		
+		return rules;
+	}
+	
+}
+
 class OWLReferencedPropertyCompiler extends OWLPropertyCompiler {
 	
-	public OWLReferencedPropertyCompiler(URI propertyName, RIFDatum subject, RIFDatum object) {
-		super(null, subject, object);
-		
-		this.propertyIRI = new RIFIRIConst();
-		this.propertyIRI.setData(propertyName);
-	}
-	
-	public OWLReferencedPropertyCompiler(URI propertyName, RIFDatum subject) {
+	public OWLReferencedPropertyCompiler(URI propertyName, RIFDatum subject){
 		super(null, subject);
 		
-		this.propertyIRI = new RIFIRIConst();
-		this.propertyIRI.setData(propertyName);
+		propertyIRI = new RIFIRIConst().setData(propertyName);
 	}
-
+	
+	public OWLReferencedPropertyCompiler(URI propertyName, RIFDatum subject, RIFDatum object){
+		super(null, subject, object);
+		
+		propertyIRI = new RIFIRIConst().setData(propertyName);
+	}
+	
 	@Override
-	protected RIFGroup compileProper(RIFGroup rules){
+	public RIFGroup compile(RIFGroup rules) {
+		return rules;
+	}
+	
+	@Override
+	public RIFGroup compile(RIFGroup rules, RIFDatum object) {
 		return rules;
 	}
 	
