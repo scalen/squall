@@ -24,6 +24,15 @@ public enum TranslatorModeOption  implements CmdLineOptionsProvider{
 		public TranslatorMode getOptions() {
 			return new RIFTranslatorMode();
 		}
+	}, 
+	/**
+	 * 
+	 */
+	OWL {
+		@Override
+		public TranslatorMode getOptions() {
+			return new OWLTranslatorMode();
+		}
 	};
 
 	@Override

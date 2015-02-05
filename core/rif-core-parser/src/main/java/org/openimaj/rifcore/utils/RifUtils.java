@@ -8,6 +8,7 @@ import java.net.URISyntaxException;
 import org.openimaj.rifcore.RIFRuleSet;
 import org.openimaj.rifcore.imports.profiles.RIFEntailmentImportProfiles;
 import org.openimaj.rifcore.imports.profiles.RIFImportProfiles.ProfileNotSupportedException;
+import org.openimaj.rifcore.imports.profiles.RIFOWLImportProfiles;
 import org.openimaj.rifcore.imports.schemes.RIFImportSchemes;
 import org.xml.sax.SAXException;
 
@@ -57,16 +58,37 @@ public class RifUtils {
 	
 	/**
 	 * @param ruleSource
+	 * @param profile 
+	 * @return
+	 */
+	public static RIFRuleSet readRules(String ruleSource, URI profile, RIFEntailmentImportProfiles profiles) {
+		try {
+			return readRules(new URI(ruleSource), profile, profiles);
+		} catch (URISyntaxException e) {
+			throw new RuntimeException(e);
+		}
+	}
+	
+	/**
+	 * @param ruleSource
 	 * @param profile
 	 * @return
 	 */
 	public static RIFRuleSet readRules(URI ruleSource, URI profile) {
-		RIFEntailmentImportProfiles profs = new RIFEntailmentImportProfiles();
+		return readRules(ruleSource, profile, new RIFEntailmentImportProfiles());
+	}
+	
+	/**
+	 * @param ruleSource
+	 * @param profile
+	 * @return
+	 */
+	public static RIFRuleSet readRules(URI ruleSource, URI profile, RIFEntailmentImportProfiles profiles) {
 		RIFImportSchemes ris = new RIFImportSchemes();
 		InputStream is = ris.get(ruleSource.getScheme()).getInputStream(ruleSource);
 		RIFRuleSet rules = null;
 		try {
-			rules = profs.parse(
+			rules = profiles.parse(
 					is,
 					profile
 				);
