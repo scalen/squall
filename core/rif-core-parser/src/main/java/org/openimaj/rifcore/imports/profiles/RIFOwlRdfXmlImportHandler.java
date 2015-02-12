@@ -354,6 +354,26 @@ abstract class OWLTranslater <IO> {
 					logger.info("Axiom " + sub.toString() + " is not a valid RIFCore axiom, so has been ignored.", e);
 				}
 			}
+		} else if (complexStatement instanceof RIFFrame){
+			RIFFrame old = (RIFFrame) complexStatement;
+
+			RIFFrame frame = new RIFFrame();
+			frame.setSubject(old.getSubject());
+			
+			int i = 0;
+			while (i < old.getPredicateObjectPairCount()){
+				if (old.getPredicate(i) != null && old.getObject(i) != null){
+					frame.setPredicate(old.getPredicate(i));
+					frame.setObject(old.getObject(i));
+				} else {
+					logger.info("triple ( " + old.getSubject() + ", " + old.getPredicate(i) + ", " + old.getObject(i) + " ) contains null values, found in frame:\n" + old.toString());
+				}
+				
+				i++;
+			}
+			if (frame.getObject() != null){
+				axioms.add(frame);
+			}
 		} else if (complexStatement instanceof RIFStatement){
 			axioms.add((RIFStatement) complexStatement);
 		} else {
@@ -519,7 +539,24 @@ class OntologyCompiler extends OWLTranslater<RIFRuleSet> {
 	private RIFGroup compileIndividualDescriptions() {
 		RIFGroup individualRules = new RIFGroup();
 		
-		//TODO
+		NodeList all = rdf.getChildNodes();
+		int i = 0;
+		while (i < all.getLength()){
+			if (all.item(i).getNodeType() == Node.ELEMENT_NODE){
+				Element description = (Element) all.item(i++);
+				if ((description.getTagName().startsWith("owl:") || description.getTagName().startsWith(OWL_PREFIX))
+						&& (description.getTagName().endsWith("Ontology")
+								|| description.getTagName().endsWith("ObjectProperty")
+								|| description.getTagName().endsWith("DatatypeProperty")
+								|| description.getTagName().endsWith("Class")
+								|| description.getTagName().endsWith("Restriction"))) {
+					continue;
+				} else {					
+					OWLIndividualCompiler ic = new OWLIndividualCompiler(description);
+					individualRules = ic.compile(individualRules);
+				}
+			} else i++;
+		}
 		
 		return cleanRIFCoreRules(individualRules);
 	}
@@ -535,6 +572,7 @@ class OWLClassCompiler extends OWLTranslater<RIFGroup> {
 	protected RIFMember classMembership;
 	protected RIFOr subClassDescriptions = new RIFOr();
 	protected RIFAnd superClassDescriptions = new RIFAnd();
+	
 	
 	public OWLClassCompiler(Element clazz, RIFDatum instance){
 		this.clazz = clazz;
@@ -2527,6 +2565,8 @@ class OWLReferencedPropertyCompiler extends OWLPropertyCompiler {
 
 class OWLIndividualCompiler extends OWLTranslater<RIFGroup>{
 
+	private static final Logger logger = Logger.getLogger(OWLIndividualCompiler.class);
+	
 	protected static int anonCount = 0; 
 	
 	protected final Element individual;
@@ -2539,33 +2579,43 @@ class OWLIndividualCompiler extends OWLTranslater<RIFGroup>{
 		
 		String cName = individual.getTagName();
 		URI classURI;
-		try {
-			classURI = new URI(cName);
-		} catch (URISyntaxException e) {
-			throw new RuntimeException("Resource IRI " + cName + " is not a valid URI.", e);
+		if (((cName.startsWith(RDF_PREFIX) || cName.startsWith("rdf:")) && cName.endsWith("Description"))
+				|| ((cName.startsWith(OWL_PREFIX) || cName.startsWith("owl:"))
+						&& (cName.endsWith("Thing") || cName.endsWith("NamedIndividual")))){
+			try {
+				classURI = new URI(OWL_PREFIX + "Thing");
+			} catch (URISyntaxException e) {
+				throw new RuntimeException("SHOULD NEVER HAPPEN, owl:Thing should be a valid URI at compile time", e);
+			}
+		} else {
+			try {
+				classURI = new URI(cName);
+			} catch (URISyntaxException e) {
+				throw new RuntimeException("Resource IRI " + cName + " is not a valid URI.", e);
+			}
 		}
 		className = new RIFIRIConst().setData(classURI);
 		
 		String identifierString = individual.getAttributeNS(RDF_PREFIX, "about");
 		URI identURI = null;
 		boolean local = false;
-		try {
-			identURI = new URI(identifierString);
-		} catch (URISyntaxException e) {
-			local = true;
-			if (identifierString.length() > 0){
+		if (identifierString.length() > 0){
+			try {
+				identURI = new URI(identifierString);
+			} catch (URISyntaxException e) {
+				local = true;
 				try {
-					identURI = new URI(individual.getBaseURI()+identifierString);
+					identURI = new URI(individual.getBaseURI()+"#"+identifierString);
 				} catch (URISyntaxException e1) {
 					throw new RuntimeException("Base URI " + individual.getBaseURI() + " plus identifier " + identifierString + " is not a valid URI.", e);
 				}
-			} else {
-				try {
-					identURI = new URI(individual.getBaseURI()+"AnonymousIdentifier-"+anonCount);
-					anonCount++;
-				} catch (URISyntaxException e1) {
-					throw new RuntimeException("SHOULD NEVER HAPPEN, base URI " + individual.getBaseURI() + " plus AnonymousIdentifier-" + anonCount, e);
-				}
+			}
+		} else {
+			try {
+				identURI = new URI(individual.getBaseURI()+"#AnonymousIdentifier-"+anonCount);
+				anonCount++;
+			} catch (URISyntaxException e) {
+				throw new RuntimeException("SHOULD NEVER HAPPEN, base URI " + individual.getBaseURI() + " plus AnonymousIdentifier-" + anonCount, e);
 			}
 		}
 		if (local) {
@@ -2585,7 +2635,87 @@ class OWLIndividualCompiler extends OWLTranslater<RIFGroup>{
 	
 	@Override
 	public RIFGroup compile(RIFGroup rules) {
-		// TODO Auto-generated method stub
+		RIFMember member = constructRIFMemeber(identifier, className);
+		try {
+			for (RIFStatement statement : this.constructValidAxioms(member)) {
+				rules.addSentence(statement);
+			}
+		} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFAxiomException e) {
+			logger.info("The following statement contains no valid RIFCore axioms:\n" + member.toString(), e);
+		}
+		
+		RIFFrame frame = new RIFFrame();
+		frame.setSubject(identifier);
+		
+		NodeList children = individual.getChildNodes();
+		int i = 0;
+		while (i < children.getLength()){
+			if (children.item(i).getNodeType() == Node.ELEMENT_NODE){
+				Element predicate = (Element) children.item(i);
+				
+				String pName = predicate.getTagName();
+				URI predURI;
+				try {
+					predURI = new URI(pName);
+				} catch (URISyntaxException e) {
+					throw new RuntimeException("Predicate tag " + pName + " is not a valid URI.", e);
+				}
+				RIFIRIConst predConst = new RIFIRIConst().setData(predURI);
+				
+				String objectName = predicate.getAttributeNS(RDF_PREFIX, "resource");
+				if (objectName.length() > 0){
+					URI objectURI;
+					try {
+						objectURI = new URI(objectName);
+					} catch (URISyntaxException e) {
+						throw new RuntimeException("Resource IRI " + objectName + " is not a valid URI.", e);
+					}
+					RIFIRIConst objectIRI = new RIFIRIConst().setData(objectURI);
+					
+					if (frame.getPredicate() != null){
+						frame.newPredObPair();
+					}
+					frame.setPredicate(predConst);
+					frame.setObject(objectIRI);
+				} else {
+					NodeList objects = predicate.getChildNodes();
+					int n = 0;
+					while (n < objects.getLength()){
+						if (objects.item(n).getNodeType() == Node.ELEMENT_NODE){
+							Element object = (Element) objects.item(n);
+							
+							// TODO recognise and compile class descriptions here
+							
+							OWLIndividualCompiler ic = new OWLIndividualCompiler(object);
+							rules = ic.compile(rules);
+							
+							if (frame.getPredicate() != null){
+								frame.newPredObPair();
+							}
+							frame.setPredicate(predConst);
+							frame.setObject(ic.getIndividualConst());
+						}
+						
+						n++;
+					}
+					
+					if (n < 1) {
+						throw new RuntimeException("Predicate statement in individual description " + individual + " must either reference a resource described elsewhere or contain at least one resource description.");
+					}
+				}				
+			}
+			
+			i++;
+		}
+		
+		try {
+			for (RIFStatement statement : this.constructValidAxioms(frame)) {
+				rules.addSentence(statement);
+			}
+		} catch (org.openimaj.rifcore.imports.profiles.OWLTranslater.InvalidRIFAxiomException e) {
+			logger.info("The following statement contains no valid RIFCore axioms:\n" + frame.toString(), e);
+		}
+		
 		return rules;
 	}
 	
