@@ -148,11 +148,19 @@ public class RIFFrame extends RIFAtomic {
 		StringBuilder string = new StringBuilder(subject.getNode().toString())
 										.append(" [\n");
 		for (int i = 0; i < this.getPredicateObjectPairCount(); i++){
-			string.append(spacing).append("  ")
-				  .append(this.getPredicate(i).getNode().toString())
-				  .append(" -> ")
-				  .append(this.getObject(i).getNode().toString())
-				  .append("\n");
+			string.append(spacing).append("  ");
+			try {
+				string.append(this.getPredicate(i).getNode().toString());
+			} catch (NullPointerException e) {
+				string.append("ERR:NULL");
+			}
+			string.append(" -> ");
+			try {
+				string.append(this.getObject(i).getNode().toString());
+			} catch (NullPointerException e) {
+				string.append("ERR:NULL");
+			} 
+			string.append("\n");
 		}
 		return string.append(spacing)
 					 .append("]")
@@ -164,11 +172,19 @@ public class RIFFrame extends RIFAtomic {
 		StringBuilder string = new StringBuilder(subject.getNode().toString())
 										.append(" [\n");
 		for (int i = 0; i < this.getPredicateObjectPairCount(); i++){
-			string.append("  ")
-				  .append(this.getPredicate(i).getNode().toString())
-				  .append(" -> ")
-				  .append(this.getObject(i).getNode().toString())
-				  .append("\n");
+			string.append("  ");
+			try {
+				string.append(this.getPredicate(i).getNode().toString());
+			} catch (NullPointerException e) {
+				string.append("ERR:NULL");
+			}
+			string.append(" -> ");
+			try {
+				string.append(this.getObject(i).getNode().toString());
+			} catch (NullPointerException e) {
+				string.append("ERR:NULL");
+			} 
+			string.append("\n");
 		}
 		return string.append("]")
 					 .toString();
