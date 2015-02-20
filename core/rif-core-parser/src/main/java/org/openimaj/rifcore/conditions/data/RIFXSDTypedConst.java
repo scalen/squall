@@ -3,7 +3,7 @@ package org.openimaj.rifcore.conditions.data;
 import java.net.URI;
 
 import com.hp.hpl.jena.datatypes.xsd.XSDDatatype;
-import com.hp.hpl.jena.graph.Node;
+import com.hp.hpl.jena.graph.NodeFactory;
 import com.hp.hpl.jena.graph.Node_Concrete;
 
 /**
@@ -31,8 +31,7 @@ public class RIFXSDTypedConst extends RIFConst<String> {
 
 	@Override
 	public RIFXSDTypedConst setData(String data) {
-		String format = "\"%s\"^^%s";
-		this.node = (Node_Concrete) Node.createLiteral(data,new XSDDatatype(this.dtype.getFragment()));
+		this.node = (Node_Concrete) NodeFactory.createLiteral(data,new XSDDatatype(this.dtype.getFragment()));
 		return this;
 	}
 
